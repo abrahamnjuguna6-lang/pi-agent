@@ -1,0 +1,62 @@
+name: lifeos
+
+x-app-env: &app-env
+  ENVIRONMENT: development
+  DATABASE_URL: postgresql://lifeos:lifeos@postgres:5432/lifeos
+  REDIS_URL: redis://redis:6379/0
+  JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-dev-only-private-key}
+  JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-dev-only-public-key}
+  HMAC_KEY: ${HMAC_KEY:-dev-only-hmac-key}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev-only-encryption-key}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16          # PostgreSQL 16 + pgvector >= 0.8
+    environment:
+      POSTGRES_USER: lifeos
+      POSTGRES_PASSWORD: lifeos
+      POSTGRES_DB: lifeos
+    ports: ["${LIFEOS_PG_PORT:-55432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lifeos -d lifeos"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports: ["${LIFEOS_REDIS_PORT:-56379}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: ../infra/Dockerfile.api
+    environment: *app-env
+    ports: ["${LIFEOS_API_PORT:-8001}:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    profiles: ["app"]
+
+  worker:
+    build:
+      context: ../backend
+      dockerfile: ../infra/Dockerfile.worker
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    profiles: ["app"]
+
+volumes:
+  pgdata:

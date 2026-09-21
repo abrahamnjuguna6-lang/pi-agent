@@ -1,0 +1,73 @@
+[project]
+name = "lifeos"
+version = "0.1.0"
+description = "Personal Life OS backend: FastAPI + LangGraph + PostgreSQL/pgvector"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.14",
+    "apscheduler>=3.11,<4",
+    "argon2-cffi>=25.1.0",
+    "cryptography>=50.0.1",
+    "fastapi>=0.115",
+    "httpx>=0.28",
+    "langchain>=1,<2",
+    "langchain-core>=1,<2",
+    "langchain-openai>=1,<2",
+    "langchain-tavily>=0.2.18",
+    "langgraph>=1,<2",
+    "langgraph-checkpoint-postgres>=3.1.2",
+    "langsmith>=0.3",
+    "numpy>=2.4.6",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "opentelemetry-sdk>=1.44.0",
+    "pgvector>=0.3",
+    "psycopg-pool>=3.3.2",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2,<3",
+    "pydantic-settings>=2.15.0",
+    "pyjwt[crypto]>=2.14.0",
+    "redis>=5",
+    "scipy>=1.17.1",
+    "sqlalchemy[asyncio]>=2,<3",
+    "sse-starlette>=2",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[dependency-groups]
+dev = [
+    "agentevals>=0.0.9",
+    "factory-boy>=3.3.3",
+    "pyright>=1.1.414",
+    "pytest>=8",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.8",
+    "time-machine>=3.5.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lifeos"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+markers = [
+    "integration: requires PostgreSQL and Redis (docker compose services)",
+    "graph: LangGraph graph tests with fake models",
+]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+branch = true
+source = ["lifeos"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

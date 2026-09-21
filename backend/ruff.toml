@@ -1,0 +1,20 @@
+target-version = "py311"
+line-length = 110
+src = ["src", "tests", "eval", "scripts"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "ASYNC", "S", "RUF", "PT", "DTZ", "TID"]
+ignore = [
+    "S101",   # assert is the pytest idiom
+    "RUF001", "RUF002", "RUF003",  # unicode punctuation in docstrings/comments (→, ≤, –)
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]   # fixed test secrets / non-crypto randomness are fine in tests
+
+[lint.flake8-tidy-imports.banned-api]
+"langchain_community".msg = "Use dedicated integration packages (design §37, langchain-dependencies skill)."
+"datetime.datetime.utcnow".msg = "Use a timezone-aware clock (lifeos.domain.timeutil / Clock)."
+
+[format]
+quote-style = "double"

@@ -1,0 +1,10 @@
+{
+  "include": ["src", "tests", "scripts"],
+  "exclude": ["**/__pycache__", ".venv"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "strict": ["src/lifeos/domain", "src/lifeos/toolbus", "src/lifeos/config.py"],
+  "reportMissingTypeStubs": false
+}
