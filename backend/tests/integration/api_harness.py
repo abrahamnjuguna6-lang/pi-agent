@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -62,6 +63,44 @@ class Api:
 
     async def me(self, access_token: str) -> httpx.Response:
         return await self.client.get("/api/v1/me", headers={"Authorization": f"Bearer {access_token}"})
+
+    async def as_user(self, email: str) -> AuthedClient:
+        """Register + verify + log in; returns a client that authenticates every call."""
+        await self.verified_user(email)
+        tokens = await self.tokens(email)
+        return AuthedClient(self.client, tokens["access_token"])
+
+
+@dataclass
+class AuthedClient:
+    client: httpx.AsyncClient
+    access_token: str
+
+    def _headers(self, key: str | None, mutating: bool) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        if mutating:
+            headers["Idempotency-Key"] = key or f"test-{uuid.uuid4()}"
+        return headers
+
+    async def get(self, path: str, **params: Any) -> httpx.Response:
+        return await self.client.get(
+            f"/api/v1{path}", params=params or None, headers=self._headers(None, False)
+        )
+
+    async def post(
+        self, path: str, json: Any = None, key: str | None = None, **params: Any
+    ) -> httpx.Response:
+        return await self.client.post(
+            f"/api/v1{path}", json=json, params=params or None, headers=self._headers(key, True)
+        )
+
+    async def patch(self, path: str, json: Any, key: str | None = None) -> httpx.Response:
+        return await self.client.patch(f"/api/v1{path}", json=json, headers=self._headers(key, True))
+
+    async def delete(self, path: str, key: str | None = None, **params: Any) -> httpx.Response:
+        return await self.client.delete(
+            f"/api/v1{path}", params=params or None, headers=self._headers(key, True)
+        )
 
 
 @pytest.fixture

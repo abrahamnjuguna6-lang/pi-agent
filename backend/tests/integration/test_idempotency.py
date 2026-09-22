@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -190,7 +190,7 @@ def goal_router() -> APIRouter:
     @router.post("/api/v1/_test/goals", status_code=201)
     async def create_goal(
         body: GoalIn, request: Request, user: CurrentUser, key: IdempotencyKey, c: ContainerDep
-    ) -> JSONResponse:
+    ) -> Response:
         async def op(s: AsyncSession) -> StoredResult:
             goal = f.GoalFactory(user_id=user.user_id, title=body.title)
             await f.persist(s, goal)

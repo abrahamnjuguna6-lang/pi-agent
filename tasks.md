@@ -299,7 +299,7 @@ infra/
 
 ## M4 — Profile and Goal Hierarchy
 
-### [ ] T4.1 ProfileService and preferences
+### [x] T4.1 ProfileService and preferences
 - **Req:** R16.1–16.2, R16.6, R8.9, R14.3 · **Design:** §24.2, §24.11 · **Depends:** T2.2
 - **Files:** `domain/profile.py`, `domain/notification_prefs.py`, `api/routers/me.py`
 - **Steps:**
@@ -309,7 +309,8 @@ infra/
 - **Tests:** `tests/unit/test_notification_prefs.py` checks defaults and the rejection of disabling all channels for L4. `tests/integration/test_profile_api.py` checks that an invalid timezone returns 422 and that a PATCH persists.
 - **Done when:** the tests pass.
 
-### [ ] T4.2 Goals, Objectives, Projects, Tasks CRUD
+### [x] T4.2 Goals, Objectives, Projects, Tasks CRUD
+> **Implementation note:** `GET /goals` returns all goals in the §15.2 priority order without a cursor (per-user goal counts are small and the order is not keyset-friendly); objectives/projects are listed per parent; `GET /tasks` uses keyset cursors on (created_at, id). Every mutation (incl. `PATCH /me`) goes through the Idempotency-Key layer.
 - **Req:** R1.1–1.2, R1.8–1.9, R3.7, R15.1 · **Design:** §24.3, §26.2 · **Depends:** T3.2, T4.1
 - **Files:** `domain/goals.py`, `domain/objectives.py`, `domain/tasks.py`, `api/routers/{goals,objectives,projects,tasks}.py`
 - **Steps:**
@@ -318,7 +319,7 @@ infra/
 - **Tests:** `tests/integration/test_goal_hierarchy_api.py` covers CRUD happy paths, 404 on another user's IDs, the objective range validation cases, and a required objective target date.
 - **Done when:** the tests pass.
 
-### [ ] T4.3 ProgressService
+### [x] T4.3 ProgressService
 - **Req:** R1.4–1.7 · **Design:** §16.1 · **Depends:** T4.2
 - **Files:** `domain/progress.py`
 - **Steps:**
@@ -327,7 +328,8 @@ infra/
 - **Tests:** `tests/unit/test_progress.py` covers every table row in design §38.1 "Progress" plus a property-based test (hypothesis) that progress is always within [0, 100]. `tests/integration/test_progress_recompute.py` checks that archiving an objective changes goal progress.
 - **Done when:** the tests pass with 100% branch coverage.
 
-### [ ] T4.4 Goal priority, archive, cascade delete, hierarchy view
+### [x] T4.4 Goal priority, archive, cascade delete, hierarchy view
+> **Implementation note:** archiving makes the subtree read-only now; cancelling the archived subtree's future Planned Daily Actions lands with scheduling (T5.3/T5.6). Cascade delete soft-deletes Objectives/Projects/Tasks/Habits and preserves Daily Actions, Check-ins and Commitments.
 - **Req:** R1.14–1.16, R7.2 · **Design:** §15, §24.3 · **Depends:** T4.3
 - **Files:** `domain/goals.py`, `api/routers/goals.py`
 - **Steps:**

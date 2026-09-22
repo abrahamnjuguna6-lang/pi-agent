@@ -17,7 +17,7 @@ import re
 from typing import Annotated, Any
 
 from fastapi import Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from lifeos.container import Container
 from lifeos.domain.auth.sessions import AuthContext
@@ -50,10 +50,12 @@ IdempotencyKey = Annotated[str, Depends(require_idempotency_key)]
 
 async def idempotent(
     request: Request, container: Container, user: AuthContext, key: str, body: Any, op: Operation
-) -> JSONResponse:
+) -> Response:
     route = request.scope.get("route")
     route_path = getattr(route, "path", request.url.path)
     fp = fingerprint(request.method, route_path + "?" + str(sorted(request.path_params.items())), body)
     outcome = await container.idempotency.run(user.user_id, key, fp, op)
     headers = {REPLAY_HEADER: "true"} if outcome.replayed else None
+    if outcome.result.status_code == 204:
+        return Response(status_code=204, headers=headers)
     return JSONResponse(status_code=outcome.result.status_code, content=outcome.result.body, headers=headers)

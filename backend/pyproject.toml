@@ -38,6 +38,7 @@ dependencies = [
 dev = [
     "agentevals>=0.0.9",
     "factory-boy>=3.3.3",
+    "hypothesis>=6.168.0",
     "pyright>=1.1.414",
     "pytest>=8",
     "pytest-asyncio>=1.4.0",

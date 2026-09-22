@@ -17,7 +17,11 @@ from lifeos.db.engine import get_sessionmaker
 from lifeos.domain.auth.service import AuthService
 from lifeos.domain.auth.sessions import SessionCache, SessionValidator
 from lifeos.domain.clock import Clock, SystemClock
+from lifeos.domain.goals import GoalService, ProjectService
 from lifeos.domain.idempotency import IdempotencyService
+from lifeos.domain.objectives import ObjectiveService
+from lifeos.domain.profile import ProfileService
+from lifeos.domain.tasks import TaskService
 from lifeos.notifications.email import EmailSender, LoggingEmailSender
 from lifeos.security.crypto import EnvelopeCipher, LocalKeyProvider
 from lifeos.security.hashing import KeyedHasher, PasswordHasher
@@ -39,6 +43,11 @@ class Container:
     session_validator: SessionValidator
     auth: AuthService
     idempotency: IdempotencyService
+    profile: ProfileService
+    goals: GoalService
+    objectives: ObjectiveService
+    projects: ProjectService
+    tasks: TaskService
 
     async def aclose(self) -> None:
         await self.redis.aclose()
@@ -96,4 +105,9 @@ def build_container(
             session_cache=cache,
         ),
         idempotency=IdempotencyService(maker, clk),
+        profile=ProfileService(cipher, clk),
+        goals=GoalService(clk),
+        objectives=ObjectiveService(clk),
+        projects=ProjectService(clk),
+        tasks=TaskService(clk),
     )
