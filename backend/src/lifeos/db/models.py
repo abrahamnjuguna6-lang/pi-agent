@@ -67,7 +67,7 @@ class User(Base):
     accountability_style: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'Balanced'::text")
     )
-    notification_prefs: Mapped[dict] = mapped_column(
+    notification_prefs: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     integrity_score_threshold: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("70"))
@@ -113,7 +113,9 @@ class AiInsight(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     agent: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    citations: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    citations: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -136,7 +138,7 @@ class AnalyticsResult(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     computed_for: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    result: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     computed_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -256,7 +258,7 @@ class DailyBriefing(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, server_default=text("gen_random_uuid()"))
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     local_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     narrative_status: Mapped[str] = mapped_column(Text, nullable=False)
     generated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     narrative: Mapped[str | None] = mapped_column(Text)
@@ -293,7 +295,7 @@ class DeveloperAlert(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, server_default=text("gen_random_uuid()"))
     source: Mapped[str] = mapped_column(Text, nullable=False)
     severity: Mapped[str] = mapped_column(Text, nullable=False)
-    details: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -313,11 +315,17 @@ class DomainEvent(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
+    available_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(True), nullable=False, server_default=text("now()")
+    )
+    attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("0"))
+    last_error: Mapped[str | None] = mapped_column(Text)
     processed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
+    dead_lettered_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
 
 
 class EmailVerificationToken(Base):
@@ -386,7 +394,7 @@ class IdempotencyRecord(Base):
         DateTime(True), nullable=False, server_default=text("now()")
     )
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    result: Mapped[dict | None] = mapped_column(JSONB)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class IntegrityScoreSnapshot(Base):
@@ -468,7 +476,7 @@ class Notification(Base):
     type: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    deep_link: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    deep_link: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     delivery_state: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'Scheduled'::text")
     )
@@ -542,7 +550,7 @@ class ProactiveFlag(Base):
     flag_type: Mapped[str] = mapped_column(Text, nullable=False)
     owner_agent: Mapped[str] = mapped_column(Text, nullable=False)
     dedupe_key: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -587,7 +595,7 @@ class RealtimeEvent(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -604,7 +612,7 @@ class Reflection(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     type: Mapped[str] = mapped_column(Text, nullable=False)
-    answers: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    answers: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     content: Mapped[str] = mapped_column(Text, nullable=False)
     goal_categories: Mapped[list[str]] = mapped_column(
         ARRAY(Text()), nullable=False, server_default=text("'{}'::text[]")
@@ -737,9 +745,15 @@ class AgentTrace(Base):
     graph: Mapped[str] = mapped_column(Text, nullable=False)
     ambiguity_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     classifier_fallback: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    tool_calls: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    memory_queries: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    proposed_actions: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    tool_calls: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    memory_queries: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    proposed_actions: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     has_tool_error: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     grounding_flags: Mapped[list[str]] = mapped_column(
         ARRAY(Text()), nullable=False, server_default=text("'{}'::text[]")
@@ -862,7 +876,9 @@ class ConversationMessage(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    citations: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    citations: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
@@ -893,7 +909,7 @@ class MemoryProposal(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     proposed_type: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence_refs: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    evidence_refs: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     theme_embedding: Mapped[Any] = mapped_column(VECTOR(1536), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'proposed'::text"))
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -982,7 +998,7 @@ class PendingConfirmation(Base):
     thread_id: Mapped[str] = mapped_column(Text, nullable=False)
     tool_name: Mapped[str] = mapped_column(Text, nullable=False)
     tier: Mapped[str] = mapped_column(Text, nullable=False)
-    preview: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    preview: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'::text"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
@@ -1045,7 +1061,7 @@ class WeeklyCeoSession(Base):
     scheduled_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     grace_ends_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    pre_session_briefing: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    pre_session_briefing: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -1185,7 +1201,7 @@ class WeeklyFocusPlan(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     ceo_session_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     week_start_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     accepted_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
@@ -1303,7 +1319,7 @@ class ScheduleSuggestion(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     trigger_action_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     local_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    proposal: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    proposal: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'proposed'::text"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
@@ -1498,7 +1514,9 @@ class RoutineException(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     exception_type: Mapped[str] = mapped_column(Text, nullable=False)
-    exception_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    exception_payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )

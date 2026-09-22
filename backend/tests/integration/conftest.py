@@ -66,8 +66,14 @@ def alembic_config(database_url: str) -> Config:
 
 @pytest.fixture(scope="session")
 def migrated(database_url: str) -> str:
-    """Bring the test database to head once per session."""
-    command.upgrade(alembic_config(database_url), "head")
+    """Rebuild the test database schema once per session (base → head).
+
+    Pre-release, the initial migration is regenerated from design.md, so an in-place "already at
+    head" database could be stale; rebuilding guarantees tests always run on the current schema.
+    """
+    cfg = alembic_config(database_url)
+    command.downgrade(cfg, "base")
+    command.upgrade(cfg, "head")
     return database_url
 
 

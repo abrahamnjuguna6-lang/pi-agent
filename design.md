@@ -164,7 +164,7 @@ The most critical design principle is the hard boundary between deterministic co
 
 ### 4.3 Domain Events
 
-Domain Services publish in-process domain events after commit (transactional outbox table `domain_events`, Section 24.13). Consumers: SSE fan-out, accountability re-evaluation, commitment evaluation, context-cache invalidation, schedule-suggestion generation. Events are at-least-once; consumers are idempotent.
+Domain Services write domain events to the transactional outbox table `domain_events` (Section 24.13) in the same transaction as the state change, so an event exists if and only if the change committed. Consumers claim events with `FOR UPDATE SKIP LOCKED`, one event per transaction. A failing handler rolls back only that event, which is retried with exponential backoff (`available_at`, 2^attempts seconds, capped at 1 h). After 10 attempts the event is dead-lettered and a developer alert is raised, so one poison event never blocks the others. Consumers: SSE fan-out, accountability re-evaluation, commitment evaluation, context-cache invalidation, schedule-suggestion generation. Events are at-least-once; consumers are idempotent.
 
 | Event | Producer | Consumers |
 |---|---|---|
@@ -2537,12 +2537,16 @@ CREATE TABLE idempotency_records (
 );
 
 CREATE TABLE domain_events (                          -- transactional outbox (Section 4.3)
-    id           bigserial PRIMARY KEY,
-    user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    event_type   text NOT NULL,
-    payload      jsonb NOT NULL,
-    created_at   timestamptz NOT NULL DEFAULT now(),
-    processed_at timestamptz
+    id               bigserial PRIMARY KEY,
+    user_id          uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type       text NOT NULL,
+    payload          jsonb NOT NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    available_at     timestamptz NOT NULL DEFAULT now(),  -- retry backoff: not claimable before this
+    attempts         smallint NOT NULL DEFAULT 0,
+    last_error       text,                                -- sanitized
+    processed_at     timestamptz,
+    dead_lettered_at timestamptz                          -- after max attempts; raises a developer alert
 );
 
 CREATE TABLE realtime_events (                        -- SSE replay buffer (Section 28.3)
@@ -2655,7 +2659,8 @@ CREATE INDEX idx_traces_flagged ON agent_traces(created_at) WHERE review_status 
 
 -- Platform
 CREATE INDEX idx_idempotency_expires ON idempotency_records(expires_at);
-CREATE INDEX idx_domain_events_unprocessed ON domain_events(id) WHERE processed_at IS NULL;
+CREATE INDEX idx_domain_events_pending ON domain_events(available_at, id)
+    WHERE processed_at IS NULL AND dead_lettered_at IS NULL;
 CREATE INDEX idx_realtime_events_user ON realtime_events(user_id, id);
 CREATE INDEX idx_proactive_open ON proactive_flags(user_id) WHERE resolved_at IS NULL;
 CREATE INDEX idx_auth_sessions_user_active ON auth_sessions(user_id) WHERE invalidated_at IS NULL;

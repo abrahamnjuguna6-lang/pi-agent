@@ -59,7 +59,8 @@ CREATE INDEX idx_traces_flagged ON agent_traces(created_at) WHERE review_status 
 
 -- Platform
 CREATE INDEX idx_idempotency_expires ON idempotency_records(expires_at);
-CREATE INDEX idx_domain_events_unprocessed ON domain_events(id) WHERE processed_at IS NULL;
+CREATE INDEX idx_domain_events_pending ON domain_events(available_at, id)
+    WHERE processed_at IS NULL AND dead_lettered_at IS NULL;
 CREATE INDEX idx_realtime_events_user ON realtime_events(user_id, id);
 CREATE INDEX idx_proactive_open ON proactive_flags(user_id) WHERE resolved_at IS NULL;
 CREATE INDEX idx_auth_sessions_user_active ON auth_sessions(user_id) WHERE invalidated_at IS NULL;

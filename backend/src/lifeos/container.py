@@ -17,6 +17,7 @@ from lifeos.db.engine import get_sessionmaker
 from lifeos.domain.auth.service import AuthService
 from lifeos.domain.auth.sessions import SessionCache, SessionValidator
 from lifeos.domain.clock import Clock, SystemClock
+from lifeos.domain.idempotency import IdempotencyService
 from lifeos.notifications.email import EmailSender, LoggingEmailSender
 from lifeos.security.crypto import EnvelopeCipher, LocalKeyProvider
 from lifeos.security.hashing import KeyedHasher, PasswordHasher
@@ -37,6 +38,7 @@ class Container:
     session_cache: SessionCache
     session_validator: SessionValidator
     auth: AuthService
+    idempotency: IdempotencyService
 
     async def aclose(self) -> None:
         await self.redis.aclose()
@@ -93,4 +95,5 @@ def build_container(
             email=mail,
             session_cache=cache,
         ),
+        idempotency=IdempotencyService(maker, clk),
     )

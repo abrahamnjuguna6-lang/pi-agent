@@ -716,12 +716,16 @@ CREATE TABLE idempotency_records (
 );
 
 CREATE TABLE domain_events (                          -- transactional outbox (Section 4.3)
-    id           bigserial PRIMARY KEY,
-    user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    event_type   text NOT NULL,
-    payload      jsonb NOT NULL,
-    created_at   timestamptz NOT NULL DEFAULT now(),
-    processed_at timestamptz
+    id               bigserial PRIMARY KEY,
+    user_id          uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type       text NOT NULL,
+    payload          jsonb NOT NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    available_at     timestamptz NOT NULL DEFAULT now(),  -- retry backoff: not claimable before this
+    attempts         smallint NOT NULL DEFAULT 0,
+    last_error       text,                                -- sanitized
+    processed_at     timestamptz,
+    dead_lettered_at timestamptz                          -- after max attempts; raises a developer alert
 );
 
 CREATE TABLE realtime_events (                        -- SSE replay buffer (Section 28.3)

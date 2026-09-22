@@ -262,7 +262,7 @@ infra/
 - **Tests:** `tests/unit/test_errors.py` checks the mapping of each code to its HTTP status and that no stack trace appears in the body.
 - **Done when:** all routers use the envelope.
 
-### [ ] T3.2 Idempotency layer (two-phase claim)
+### [x] T3.2 Idempotency layer (two-phase claim)
 - **Req:** R15.5 · **Design:** §22 · **Depends:** T1.2, T3.1
 - **Files:** `api/idempotency.py`, `domain/idempotency.py`
 - **Steps:**
@@ -278,7 +278,8 @@ infra/
   - after 24 h the key is treated as new.
 - **Done when:** the tests pass.
 
-### [ ] T3.3 Domain events outbox and consumers
+### [x] T3.3 Domain events outbox and consumers
+> **Implementation note:** `domain_events` gained `available_at`, `attempts`, `last_error`, `dead_lettered_at` (design §4.3, §24.13): per-event transactions, exponential backoff, dead-letter after 10 attempts with a developer alert — a poison event never blocks others.
 - **Req:** — · **Design:** §4.3, §24.13 · **Depends:** T1.2
 - **Files:** `events/outbox.py`, `events/consumer.py`, `events/types.py`
 - **Steps:**
@@ -287,7 +288,7 @@ infra/
 - **Tests:** `tests/integration/test_outbox.py` checks that an event is not visible when the transaction rolls back, is processed once with two consumers, and is retried after a handler exception.
 - **Done when:** the tests pass.
 
-### [ ] T3.4 Time and timezone utilities
+### [x] T3.4 Time and timezone utilities
 - **Req:** R16.2, R21.3–21.5 · **Design:** §20.3 · **Depends:** T0.1
 - **Files:** `domain/timeutil.py`
 - **Steps:** implement `resolve_local(date, time, tz) -> datetime` in UTC (spring-forward advances minute by minute, fall-back uses `fold=0`), plus `local_date(dt, tz)`, `local_day_bounds(date, tz)`, `iso_week_bounds`, and time blocks that cross midnight.
