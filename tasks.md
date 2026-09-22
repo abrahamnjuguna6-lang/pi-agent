@@ -65,7 +65,7 @@ backend/
   src/lifeos/
     config.py                 # Pydantic Settings
     main.py                   # FastAPI app + lifespan (pool, checkpointer, graphs)
-    db/                       # engine, session (SET LOCAL app.user_id), models/, alembic/
+    db/                       # engine, session (SET LOCAL ROLE + app.user_id), models.py, migrations/
     domain/                   # one module per Domain Service (design §5.4)
     events/                   # outbox publisher + consumers
     toolbus/                  # registry.py, specs/, policy.py, executor.py, results.py
@@ -152,7 +152,7 @@ infra/
 
 ## M1 — Database Foundation
 
-### [ ] T1.1 SQLAlchemy base, session, and RLS context
+### [x] T1.1 SQLAlchemy base, session, and RLS context
 - **Req:** R17.1 · **Design:** §24.1, §33.2 · **Depends:** T0.1
 - **Files:** `db/engine.py`, `db/session.py`, `db/base.py`
 - **Steps:**
@@ -161,9 +161,9 @@ infra/
 - **Tests:** `tests/integration/test_session_rls.py` (after T1.2) checks that rows of user A are invisible in a session for user B, and that a system session sees both only when filtered explicitly.
 - **Done when:** every repository function obtains a session through these helpers.
 
-### [ ] T1.2 Initial migration: full schema
+### [x] T1.2 Initial migration: full schema
 - **Req:** R15.9 · **Design:** §24.2–§24.13 · **Depends:** T1.1
-- **Files:** `db/alembic/versions/0001_initial.py`, `db/models/*.py`
+- **Files:** `db/migrations/versions/0001_initial.py`, `db/migrations/sql/0001_schema.sql` (extracted from design §24 by `scripts/extract_schema.py`), `db/models.py`
 - **Steps:**
   1. Enable the `pgcrypto`, `vector`, and `pg_trgm` extensions.
   2. Create every table from design §24 **exactly as specified**, in FK order (daily_actions before routine_exceptions; the deferred FKs added with `ALTER`).
@@ -174,9 +174,9 @@ infra/
   - unique constraints: Daily Action occurrence uniqueness, `daily_briefings(user_id, local_date)`, `weekly_ceo_sessions(user_id, week_start_date)`, `uq_reflections_daily`.
 - **Done when:** all constraint tests pass and `alembic check` reports no drift between the models and the database.
 
-### [ ] T1.3 Indexes, RLS policies, and immutability triggers
+### [x] T1.3 Indexes, RLS policies, and immutability triggers
 - **Req:** R3.4, R23.2 · **Design:** §24.1, §25 · **Depends:** T1.2
-- **Files:** `db/alembic/versions/0002_indexes_rls_triggers.py`
+- **Files:** `db/migrations/versions/0002_indexes_rls_triggers.py`, `db/migrations/sql/{0002_indexes,0002_security}.sql`
 - **Steps:**
   1. Create every index in design §25.
   2. For each user-owned table, add `ENABLE ROW LEVEL SECURITY` and `CREATE POLICY user_isolation USING (user_id = current_setting('app.user_id')::uuid)`. Create the `lifeos_app` and `lifeos_worker` (BYPASSRLS) roles.
@@ -188,7 +188,7 @@ infra/
   - a meta-test lists every table with `user_id` and asserts that RLS is enabled on it, so future tables cannot miss it.
 - **Done when:** all tests pass.
 
-### [ ] T1.4 Test data factories and fixtures
+### [x] T1.4 Test data factories and fixtures
 - **Req:** — · **Design:** §38.2 · **Depends:** T1.2
 - **Files:** `tests/factories.py`, `tests/conftest.py`
 - **Steps:** add factory-boy factories for every aggregate (user, goal tree, routine, habit, daily action with check-ins, commitment with links, memory entry). Add a per-test transactional DB fixture, a `frozen_clock` fixture, and a `user_tz` parameterization (UTC, America/New_York, Africa/Nairobi, Australia/Lord_Howe).
@@ -715,7 +715,7 @@ infra/
 ### [ ] T12.7 Supervisor graph assembly and checkpointer lifecycle
 - **Req:** R5, R13.6 · **Design:** §6.5–6.7, §9.1 · **Depends:** T12.6
 - **References:** `D:checkpointers`, `S:lg-persist`
-- **Files:** `agents/graphs/supervisor.py`, `main.py` (lifespan), `db/alembic/versions/0003_checkpointer.py` (calls `AsyncPostgresSaver.setup()` in the migration job)
+- **Files:** `agents/graphs/supervisor.py`, `main.py` (lifespan), `db/migrations/versions/0003_checkpointer.py` (calls `AsyncPostgresSaver.setup()` in the migration job)
 - **Steps:**
   1. Compile the graph exactly as in design §6.5 with `context_schema=TurnContext`.
   2. The lifespan creates the `AsyncConnectionPool` with `autocommit=True`, `prepare_threshold=0`, and `row_factory=dict_row`, and builds all graphs once.

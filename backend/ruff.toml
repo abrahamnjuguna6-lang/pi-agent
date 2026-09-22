@@ -10,7 +10,8 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-"tests/**" = ["S105", "S106", "S311"]   # fixed test secrets / non-crypto randomness are fine in tests
+"tests/**" = ["S105", "S106", "S311", "PT012"]   # test secrets; raises-blocks wrap a whole transaction (violations surface at commit)
+"src/lifeos/db/models.py" = ["E501"]   # generated mapping (sqlacodegen), kept one column per line
 
 [lint.flake8-tidy-imports.banned-api]
 "langchain_community".msg = "Use dedicated integration packages (design §37, langchain-dependencies skill)."

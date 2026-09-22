@@ -1729,7 +1729,11 @@ This section is the **single authoritative schema**. Other sections refer to it 
 - **Timestamps and IDs:** timestamps are `timestamptz` stored in UTC. Columns representing a User-local calendar date are `date`, interpreted in the User's timezone by services. Primary keys are `uuid DEFAULT gen_random_uuid()`, except append-only high-volume logs, which use `bigserial`.
 - **Enumerations:** stored as `text` with CHECK constraints, so values are readable in exports and cheap to migrate.
 - **User scoping:** every user-owned table has `user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE`. The final account purge is `DELETE FROM users WHERE id = $1` inside a purge transaction (Section 24.14).
-- **Row-level security (defense in depth):** every user-owned table has `ENABLE ROW LEVEL SECURITY` with the policy `USING (user_id = current_setting('app.user_id')::uuid)`. The API sets `SET LOCAL app.user_id` per transaction. The worker uses a separate database role with `BYPASSRLS`, and every worker query passes an explicit `user_id` filter. Service-layer ownership checks remain the primary control (Section 33.2).
+- **Row-level security (defense in depth):** every user-owned table has `ENABLE ROW LEVEL SECURITY` with the policy `USING (user_id = nullif(current_setting('app.user_id', true), '')::uuid)` (`users` uses `id`). An unset or reset `app.user_id` evaluates to NULL, so the policy matches no rows and fails closed. `nullif` is needed because a reset custom setting reads back as `''`. Tables without a `user_id` column, and the excluded operational tables, are not granted to `lifeos_app` at all.
+  - **User-scoped transactions** run `SET LOCAL ROLE lifeos_app` and `SET LOCAL app.user_id`. `lifeos_app` is a NOLOGIN role granted to the connection user, with DML privileges and no RLS bypass. This is necessary because superusers and table owners bypass RLS.
+  - **System transactions** (worker, auth lookups before a user is known, developer/admin queries after a staff check) use the schema-owner connection. RLS is not `FORCE`d, so the owner bypasses it, and every system query passes an explicit `user_id` filter.
+  - **Excluded tables:** the operational tables `background_job_runs`, `developer_alerts` and `account_deletion_requests` have no user-facing access path and are not RLS-scoped.
+  - Service-layer ownership checks remain the primary control (Section 33.2).
 - **Immutable tables:** `checkin_records`, `daily_action_schedule_history`, `commitment_events`, and `objective_value_history` have a trigger that rejects UPDATE and DELETE unless `current_setting('app.allow_history_delete', true) = 'on'`. Only the purge transaction sets that value.
 - **Soft delete:** user-deletable domain entities (goals, objectives, projects, tasks, habits, routine templates/entries, reflections, conversation sessions) have `deleted_at`. Soft-deleted rows are hidden immediately and hard-deleted by `retention_cleanup` after 30 days. Memory entries are hard-deleted immediately (Section 23.6).
 - **Extensions:** `pgcrypto`, `vector`, and `pg_trgm`.
@@ -1969,8 +1973,8 @@ CREATE TABLE habit_occurrence_records (
     note               text,
     created_at         timestamptz NOT NULL DEFAULT now(),
     UNIQUE (habit_id, occurrence_date),
-    CHECK ((result = 'partial') = (completion_percent BETWEEN 1 AND 99)),
-    CHECK (result <> 'skipped' OR length(trim(note)) > 0)
+    CHECK ((result = 'partial') = coalesce(completion_percent BETWEEN 1 AND 99, false)),   -- NULL-safe
+    CHECK (result <> 'skipped' OR coalesce(length(trim(note)), 0) > 0)
 );
 
 CREATE TABLE routine_templates (
@@ -2053,7 +2057,7 @@ CREATE TABLE checkin_records (                      -- immutable
     note              text,                             -- skip reason (required) or completion note
     trace_id          uuid,                             -- agent trace when transition_source = 'Agent'
     created_at        timestamptz NOT NULL DEFAULT now(),
-    CHECK (new_status <> 'Skipped' OR length(trim(note)) > 0)                                    -- R3.6
+    CHECK (new_status <> 'Skipped' OR coalesce(length(trim(note)), 0) > 0)                                  -- R3.6
 );
 
 CREATE TABLE routine_exceptions (
