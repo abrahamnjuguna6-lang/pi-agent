@@ -199,7 +199,8 @@ infra/
 
 ## M2 — Security and Authentication
 
-### [ ] T2.1 Crypto primitives
+### [x] T2.1 Crypto primitives
+> **Implementation note:** `LocalKeyProvider` derives KEKs from secret-manager-provided secrets; the cloud-KMS `KeyProvider` adapter is delivered with deployment (T18.3). `security/kms.py` is therefore not created yet.
 - **Req:** R17 · **Design:** §21.6–21.7, §33.5 · **Depends:** T0.1
 - **Files:** `security/crypto.py`, `security/hashing.py`, `security/kms.py`
 - **Steps:**
@@ -210,7 +211,7 @@ infra/
 - **Tests:** `tests/unit/test_crypto.py` covers the encrypt/decrypt round trip, tamper detection, key-version rotation (decrypting an old version), deterministic HMAC, and Argon2id verify and rehash detection.
 - **Done when:** the tests pass and no key material is logged.
 
-### [ ] T2.2 JWT and session version cache
+### [x] T2.2 JWT and session version cache
 - **Req:** R15.6, R17.4–17.5 · **Design:** §21.1–21.2 · **Depends:** T2.1, T1.2
 - **Files:** `security/jwt.py`, `domain/auth/sessions.py`, `api/deps.py`
 - **Steps:**
@@ -219,7 +220,8 @@ infra/
 - **Tests:** `tests/unit/test_jwt.py` covers expired tokens, a wrong `kid`, and tampered tokens. `tests/integration/test_session_version.py` checks that a token with a stale `ver` is rejected, and that it is still rejected when Redis is empty (the database is authoritative).
 - **Done when:** the tests pass.
 
-### [ ] T2.3 Registration, email verification, login, lockout
+### [x] T2.3 Registration, email verification, login, lockout
+> **Implementation note:** email is sent through the `EmailSender` port (`notifications/email.py`); routing sends through the outbox after commit happens with T3.3/T9.2. The unverified-email check runs *after* password verification so it never reveals account state to password guessers.
 - **Req:** R17.1–17.3, R17.8 · **Design:** §21.4–21.5, §33.4 · **Depends:** T2.2, T3.3
 - **Files:** `domain/auth/service.py`, `api/routers/auth.py`, `notifications/email.py` (transactional email adapter)
 - **Steps:**
@@ -232,7 +234,7 @@ infra/
   - a duplicate email is rejected because the HMAC is unique.
 - **Done when:** the tests pass.
 
-### [ ] T2.4 Refresh rotation, replay detection, logout, password reset
+### [x] T2.4 Refresh rotation, replay detection, logout, password reset
 - **Req:** R17.4–17.6 · **Design:** §21.2–21.4 · **Depends:** T2.3
 - **Files:** `domain/auth/service.py`, `api/routers/auth.py`
 - **Steps:**
@@ -250,7 +252,7 @@ infra/
 
 ## M3 — Platform Services
 
-### [ ] T3.1 Error model and response envelope
+### [x] T3.1 Error model and response envelope
 - **Req:** R15.7 · **Design:** §26.1, §26.3 · **Depends:** T0.1
 - **Files:** `api/errors.py`, `domain/errors.py`
 - **Steps:**

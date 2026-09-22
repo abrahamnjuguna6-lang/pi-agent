@@ -97,3 +97,7 @@ async def db(engine: AsyncEngine, app_tables: list[str]) -> AsyncIterator[async_
     async with engine.begin() as conn:
         # TRUNCATE does not fire the row-level append-only triggers.
         await conn.execute(text(f"TRUNCATE {', '.join(app_tables)} RESTART IDENTITY CASCADE"))
+
+
+# API harness fixture (tests/integration/api_harness.py), shared by all integration modules.
+from tests.integration.api_harness import api  # noqa: E402, F401

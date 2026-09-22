@@ -2818,6 +2818,9 @@ Stable error codes include:
 - `SKIP_REASON_REQUIRED`, `GOAL_ARCHIVED`, `CASCADE_CONFIRMATION_REQUIRED`
 - `REQUEST_IN_PROGRESS`, `IDEMPOTENCY_KEY_REUSED`, `EMAIL_NOT_VERIFIED`, `ACCOUNT_LOCKED`
 - `RATE_LIMITED`, `TURN_IN_PROGRESS`, `AI_UNAVAILABLE`
+- authentication: `UNAUTHENTICATED`, `INVALID_CREDENTIALS` (unknown email and wrong password are indistinguishable), `INVALID_TOKEN`, `EMAIL_TAKEN`, `WEAK_PASSWORD`, `FORBIDDEN`
+
+HTTP mapping: validation 422 · not-found 404 · state conflicts 409 · `EMAIL_NOT_VERIFIED`/`FORBIDDEN` 403 · `ACCOUNT_LOCKED` 423 · `RATE_LIMITED` 429 · authentication 401 (with `WWW-Authenticate: Bearer`) · `AI_UNAVAILABLE` 503 · unhandled 500 `INTERNAL_ERROR` with no internals.
 
 ### 26.4 JSON Export (R18.1)
 

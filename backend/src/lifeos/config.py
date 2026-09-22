@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     jwt_key_id: str = "k1"
     hmac_key: SecretStr
     encryption_key: SecretStr
+    encryption_key_id: str = "k1"
+    # Previous encryption keys kept for decryption after rotation: {"k0": "<secret>"}
+    encryption_retired_keys: dict[str, SecretStr] = Field(default_factory=dict)
 
     # Provider credentials (required outside development/test)
     openai_api_key: SecretStr | None = None
@@ -72,6 +75,13 @@ class Settings(BaseSettings):
     refresh_token_ttl_hours: int = Field(default=24, le=24)
     email_verification_ttl_hours: int = 24
     password_reset_ttl_minutes: int = 60
+    login_ip_threshold: int = 20
+    password_min_length: int = 10
+    # Argon2id (design §21.6); tests may lower memory for speed, never below the OWASP floor.
+    argon2_memory_kib: int = Field(default=65536, ge=19456)
+    argon2_time_cost: int = Field(default=3, ge=2)
+    argon2_parallelism: int = 1
+    public_app_url: str = "http://localhost:5173"
     login_lockout_threshold: int = 5
     login_lockout_window_minutes: int = 10
     login_lockout_duration_minutes: int = 15

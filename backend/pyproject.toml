@@ -68,6 +68,8 @@ addopts = "-ra --strict-markers"
 [tool.coverage.run]
 branch = true
 source = ["lifeos"]
+# SQLAlchemy asyncio runs ORM code inside greenlets; trace them or coverage under-reports.
+concurrency = ["thread", "greenlet"]
 
 [tool.coverage.report]
 show_missing = true
