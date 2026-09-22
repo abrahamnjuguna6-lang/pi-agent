@@ -344,14 +344,15 @@ infra/
 
 ## M5 — Scheduling, Habits, Daily Actions, Check-ins
 
-### [ ] T5.1 Routine Templates and Entries
+### [x] T5.1 Routine Templates and Entries
 - **Req:** R2.1–2.2 · **Design:** §24.4 · **Depends:** T4.2
 - **Files:** `domain/routines.py`, `api/routers/routines.py`
 - **Steps:** CRUD with the rule that at most one active template applies per weekday, entries crossing midnight are allowed, and entries can link to a Goal or Habit.
 - **Tests:** `tests/integration/test_routines_api.py` checks the conflicting-weekday rejection and the stable entry IDs across edits.
 - **Done when:** the tests pass.
 
-### [ ] T5.2 Habits CRUD and pauses
+### [x] T5.2 Habits CRUD and pauses
+> **Implementation note:** Daily Actions are never deleted (their Check-in Records are append-only), so a pause **cancels** future Planned occurrences (`habit_paused` history). The occurrence unique index now constrains only active rows, so resuming regenerates them; user cancellations write `removed` exceptions/overrides and are never regenerated (design §12.1, §17.4).
 - **Req:** R1.10, R1.12 · **Design:** §17.1, §17.4, §24.4 · **Depends:** T4.2
 - **Files:** `domain/habits.py`, `api/routers/habits.py`
 - **Steps:**
@@ -360,7 +361,7 @@ infra/
 - **Tests:** `tests/integration/test_habits_api.py` checks recurrence validation, that pausing removes future actions, and that resuming allows generation again.
 - **Done when:** the tests pass.
 
-### [ ] T5.3 Daily Action generation (Routine Instances and Habits)
+### [x] T5.3 Daily Action generation (Routine Instances and Habits)
 - **Req:** R1.13, R2.3–2.4 · **Design:** §12.1, §17.1, §20.2 · **Depends:** T5.1, T5.2, T3.4
 - **Files:** `domain/schedule/generation.py`
 - **Steps:**
@@ -370,7 +371,8 @@ infra/
 - **Tests:** `tests/unit/test_generation_rules.py` covers which entries and habits apply on a given date. `tests/integration/test_generation.py` checks idempotency (running twice gives the same rows), the initial check-in, DST-day times, a midnight-crossing entry, a paused habit being skipped, and a routine-linked habit producing no duplicate.
 - **Done when:** the tests pass.
 
-### [ ] T5.4 CheckinService (status machine)
+### [x] T5.4 CheckinService (status machine)
+> **Implementation note:** Task and Habit sync run as **same-transaction** check-in hooks (`task_sync_hook`, `habit_sync_hook`) rather than eventual outbox handlers, so a Task/occurrence can never disagree with its Daily Action. Check-ins sharing a timestamp are ordered by the transition chain (`chain_order`); outbox events are stamped with the injected clock (`publish(..., at=now)`).
 - **Req:** R3.1–3.6, R3.13 · **Design:** §16.2 · **Depends:** T5.3, T3.3
 - **Files:** `domain/checkins.py`, `api/routers/daily_actions.py` (checkins endpoints)
 - **Steps:**
@@ -381,7 +383,7 @@ infra/
 - **Tests:** `tests/unit/test_checkin_transitions.py` covers the full matrix in design §38.1 at **100% branch coverage**. `tests/integration/test_checkins.py` covers two concurrent transitions (one wins, one gets `INVALID_TRANSITION`), no record on a rejected transition, and an event published only on commit.
 - **Done when:** the tests pass and the coverage gate is enforced for `domain/checkins.py`.
 
-### [ ] T5.5 Task ↔ Daily Action sync and scheduling Tasks
+### [x] T5.5 Task ↔ Daily Action sync and scheduling Tasks
 - **Req:** R1.9, R3.7, R3.10 · **Design:** §16.2, §10.3 (`complete_task`) · **Depends:** T5.4
 - **Files:** `domain/tasks.py`
 - **Steps:**
@@ -391,7 +393,7 @@ infra/
 - **Tests:** `tests/integration/test_task_sync.py`
 - **Done when:** the tests pass.
 
-### [ ] T5.6 Source-aware rescheduling, cancellation, schedule history
+### [x] T5.6 Source-aware rescheduling, cancellation, schedule history
 - **Req:** R2.5–2.8, R3.11 · **Design:** §12.2–12.4, §13 · **Depends:** T5.4
 - **Files:** `domain/schedule/reschedule.py`, `api/routers/daily_actions.py`
 - **Steps:**
@@ -402,21 +404,23 @@ infra/
 - **Tests:** `tests/unit/test_reschedule_rules.py` covers the §38.1 scheduling table. `tests/integration/test_reschedule.py` checks that a cross-day move has no uniqueness collision, that the Completion Rate counts only on the destination date (after T5.8), and that a Started action is rejected.
 - **Done when:** the tests pass.
 
-### [ ] T5.7 Timezone change handling
+### [x] T5.7 Timezone change handling
+> **Implementation note:** future Planned actions are **re-anchored in place** (same local date and wall-clock time, new UTC, `timezone_change` history row) instead of delete + regenerate, which append-only check-ins forbid; design §12.5 updated.
 - **Req:** R21.4 · **Design:** §12.5 · **Depends:** T5.6, T4.1
 - **Files:** `domain/profile.py`, `domain/schedule/timezone_change.py`
 - **Steps:** follow design §12.5 in one transaction: regenerate untouched future routine and habit actions, and recompute UTC for task and manual actions at the same wall-clock time, with history rows.
 - **Tests:** `tests/integration/test_timezone_change.py` checks that past rows are unchanged, that regenerated actions are correct, and that task actions keep 09:00 local.
 - **Done when:** the tests pass.
 
-### [ ] T5.8 Completion Rate
+### [x] T5.8 Completion Rate
 - **Req:** R3.12–3.13 · **Design:** §16.3 · **Depends:** T5.4
 - **Files:** `domain/analytics/completion.py`
 - **Steps:** `completion_rate(user, period)` derives the status from the latest check-in at or before the period end, excludes cancelled actions, returns `null` for empty days, and uses local-date bounds.
 - **Tests:** `tests/unit/test_completion_rate.py` covers Started in the denominator only, cancelled excluded, rescheduled counted once, an overdue action counted as Planned, and historical as-of evaluation.
 - **Done when:** the tests pass with 100% branch coverage.
 
-### [ ] T5.9 Habit occurrences and metrics
+### [x] T5.9 Habit occurrences and metrics
+> **Implementation note:** metrics are computed on read by the pure `habit_metrics.compute_metrics` (100% branch coverage); the 5-minute Redis cache is deferred to the read-model/caching work in T14.2.
 - **Req:** R1.11–1.12 · **Design:** §17.2–17.3 · **Depends:** T5.4, T5.2
 - **Files:** `domain/habits.py`, `api/routers/habits.py`
 - **Steps:**
@@ -425,7 +429,8 @@ infra/
 - **Tests:** `tests/unit/test_habit_metrics.py` covers a daily streak, a weekly target of 3 per week, a partial not counting, pause days neither breaking nor extending a streak, and missed-occurrence counting. `tests/integration/test_habit_occurrence.py` checks that a partial gives a Completed Daily Action.
 - **Done when:** the tests pass.
 
-### [ ] T5.10 Late-completion schedule suggestions
+### [x] T5.10 Late-completion schedule suggestions
+> **Implementation note:** the handler runs from the outbox (`daily_action.status_changed`) and is idempotent per trigger action; the proactive-flag creation is an injectable `SuggestionService` hook, wired in T13.1.
 - **Req:** R2.9 · **Design:** §19.9, §24.5 · **Depends:** T5.6
 - **Files:** `domain/schedule/suggestions.py`, `api/routers/schedule_suggestions.py`
 - **Steps:**

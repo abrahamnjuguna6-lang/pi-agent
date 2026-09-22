@@ -281,9 +281,9 @@ CREATE TABLE daily_actions (
     CHECK ((source_type = 'MANUAL') = (source_id IS NULL)),
     CHECK ((lifecycle_state = 'cancelled') = (cancelled_at IS NOT NULL))
 );
-CREATE UNIQUE INDEX uq_daily_actions_occurrence
+CREATE UNIQUE INDEX uq_daily_actions_occurrence            -- one ACTIVE action per source occurrence
     ON daily_actions (user_id, source_type, source_id, occurrence_date)
-    WHERE source_type IN ('ROUTINE_ENTRY','HABIT','TASK');
+    WHERE source_type IN ('ROUTINE_ENTRY','HABIT','TASK') AND lifecycle_state = 'active';
 
 ALTER TABLE habit_occurrence_records
     ADD FOREIGN KEY (daily_action_id) REFERENCES daily_actions(id) ON DELETE SET NULL;

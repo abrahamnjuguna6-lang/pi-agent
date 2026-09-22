@@ -8,6 +8,7 @@ claims it after commit.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,17 @@ from lifeos.events.types import EventType
 
 
 async def publish(
-    session: AsyncSession, event_type: EventType, user_id: uuid.UUID, payload: dict[str, Any]
+    session: AsyncSession,
+    event_type: EventType,
+    user_id: uuid.UUID,
+    payload: dict[str, Any],
+    at: datetime | None = None,
 ) -> None:
-    session.add(m.DomainEvent(user_id=user_id, event_type=event_type, payload=payload))
+    """`at` should be the same (injected-clock) instant as the state change, so events are ordered and
+    become claimable on the application clock rather than the database clock."""
+    event = m.DomainEvent(user_id=user_id, event_type=event_type, payload=payload)
+    if at is not None:
+        event.created_at = at
+        event.available_at = at
+    session.add(event)
     await session.flush()

@@ -16,12 +16,21 @@ from lifeos.config import Settings
 from lifeos.db.engine import get_sessionmaker
 from lifeos.domain.auth.service import AuthService
 from lifeos.domain.auth.sessions import SessionCache, SessionValidator
+from lifeos.domain.checkins import CheckinService
 from lifeos.domain.clock import Clock, SystemClock
 from lifeos.domain.goals import GoalService, ProjectService
+from lifeos.domain.habits import HabitService, habit_sync_hook
 from lifeos.domain.idempotency import IdempotencyService
 from lifeos.domain.objectives import ObjectiveService
 from lifeos.domain.profile import ProfileService
-from lifeos.domain.tasks import TaskService
+from lifeos.domain.routines import RoutineService
+from lifeos.domain.schedule.actions import DailyActionService
+from lifeos.domain.schedule.generation import GenerationService
+from lifeos.domain.schedule.reschedule import RescheduleService
+from lifeos.domain.schedule.suggestions import SuggestionService
+from lifeos.domain.schedule.timezone_change import TimezoneChangeService
+from lifeos.domain.tasks import TaskService, task_sync_hook
+from lifeos.events.consumer import OutboxConsumer
 from lifeos.notifications.email import EmailSender, LoggingEmailSender
 from lifeos.security.crypto import EnvelopeCipher, LocalKeyProvider
 from lifeos.security.hashing import KeyedHasher, PasswordHasher
@@ -48,6 +57,14 @@ class Container:
     objectives: ObjectiveService
     projects: ProjectService
     tasks: TaskService
+    routines: RoutineService
+    habits: HabitService
+    generation: GenerationService
+    daily_actions: DailyActionService
+    checkins: CheckinService
+    reschedule: RescheduleService
+    suggestions: SuggestionService
+    outbox: OutboxConsumer
 
     async def aclose(self) -> None:
         await self.redis.aclose()
@@ -79,6 +96,8 @@ def build_container(
     jwt = JwtService(signing, clk, timedelta(minutes=settings.access_token_ttl_minutes))
     cache = SessionCache(redis_client, ttl_seconds=jwt.ttl_seconds + 60)
     mail = email or LoggingEmailSender()
+    reschedule = RescheduleService(clk)
+    suggestions = SuggestionService(clk, reschedule)
 
     return Container(
         settings=settings,
@@ -105,9 +124,17 @@ def build_container(
             session_cache=cache,
         ),
         idempotency=IdempotencyService(maker, clk),
-        profile=ProfileService(cipher, clk),
+        profile=ProfileService(cipher, clk, timezone_hooks=[TimezoneChangeService(clk)]),
         goals=GoalService(clk),
         objectives=ObjectiveService(clk),
         projects=ProjectService(clk),
         tasks=TaskService(clk),
+        routines=RoutineService(clk),
+        habits=HabitService(clk),
+        generation=GenerationService(clk),
+        daily_actions=DailyActionService(clk),
+        checkins=CheckinService(clk, hooks=[task_sync_hook, habit_sync_hook]),
+        reschedule=reschedule,
+        suggestions=suggestions,
+        outbox=OutboxConsumer(maker, clk, {"daily_action.status_changed": [suggestions.on_status_changed]}),
     )

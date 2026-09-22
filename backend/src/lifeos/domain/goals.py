@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lifeos.db import models as m
 from lifeos.domain.clock import Clock
 from lifeos.domain.errors import DomainError, NotFoundError
+from lifeos.domain.schedule.common import system_cancel
 
 GoalCategory = Literal["Life", "Career", "Personal", "Spiritual", "Fitness", "Family"]
 GoalStatus = Literal["active", "archived", "completed"]
@@ -201,8 +202,36 @@ class GoalService:
             goal.status = "archived"
             goal.archived_at = now
             goal.updated_at = now
+            await self._cancel_future_actions(s, user_id, goal.id, now)
             await s.flush()
         return goal
+
+    async def _cancel_future_actions(
+        self, s: AsyncSession, user_id: uuid.UUID, goal_id: uuid.UUID, now: datetime
+    ) -> None:
+        """Future Planned Daily Actions of the archived subtree are cancelled; history stays intact."""
+        objective_ids = select(m.Objective.id).where(m.Objective.goal_id == goal_id)
+        project_ids = select(m.Project.id).where(m.Project.objective_id.in_(objective_ids))
+        task_ids = select(m.Task.id).where(or_(m.Task.goal_id == goal_id, m.Task.project_id.in_(project_ids)))
+        habit_ids = select(m.Habit.id).where(
+            or_(m.Habit.goal_id == goal_id, m.Habit.project_id.in_(project_ids))
+        )
+        future = (
+            await s.execute(
+                select(m.DailyAction).where(
+                    m.DailyAction.user_id == user_id,
+                    m.DailyAction.lifecycle_state == "active",
+                    m.DailyAction.status == "Planned",
+                    m.DailyAction.scheduled_start > now,
+                    or_(
+                        (m.DailyAction.source_type == "TASK") & m.DailyAction.source_id.in_(task_ids),
+                        (m.DailyAction.source_type == "HABIT") & m.DailyAction.source_id.in_(habit_ids),
+                    ),
+                )
+            )
+        ).scalars()
+        for action in future:
+            system_cancel(s, action, "cancelled", "goal_archived", now)
 
     async def cascade_counts(self, s: AsyncSession, user_id: uuid.UUID, goal_id: uuid.UUID) -> CascadeCounts:
         live_objectives = select(m.Objective.id).where(

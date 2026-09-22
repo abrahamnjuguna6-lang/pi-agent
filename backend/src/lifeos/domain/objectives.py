@@ -85,6 +85,7 @@ class ObjectiveService:
                 "goal_progress": str(goal_progress),
                 "actor": actor,
             },
+            at=now,
         )
 
     async def create(

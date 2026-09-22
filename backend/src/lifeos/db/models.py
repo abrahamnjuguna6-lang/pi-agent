@@ -113,9 +113,7 @@ class AiInsight(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     agent: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    citations: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, server_default=text("'[]'::jsonb")
-    )
+    citations: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
     )
@@ -745,13 +743,11 @@ class AgentTrace(Base):
     graph: Mapped[str] = mapped_column(Text, nullable=False)
     ambiguity_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     classifier_fallback: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    tool_calls: Mapped[dict[str, Any]] = mapped_column(
+    tool_calls: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    memory_queries: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
-    memory_queries: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, server_default=text("'[]'::jsonb")
-    )
-    proposed_actions: Mapped[dict[str, Any]] = mapped_column(
+    proposed_actions: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     has_tool_error: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
@@ -876,9 +872,7 @@ class ConversationMessage(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    citations: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, server_default=text("'[]'::jsonb")
-    )
+    citations: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")
@@ -909,7 +903,7 @@ class MemoryProposal(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     proposed_type: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence_refs: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    evidence_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     theme_embedding: Mapped[Any] = mapped_column(VECTOR(1536), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'proposed'::text"))
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -1319,7 +1313,7 @@ class ScheduleSuggestion(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     trigger_action_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     local_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    proposal: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    proposal: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'proposed'::text"))
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(True), nullable=False, server_default=text("now()")

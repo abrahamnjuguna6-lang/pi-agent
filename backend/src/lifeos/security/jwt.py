@@ -20,6 +20,7 @@ from lifeos.domain.clock import Clock
 
 log = logging.getLogger(__name__)
 ALGORITHM = "EdDSA"
+MAX_CLOCK_SKEW_SECONDS = 60  # tolerate small clock differences between API replicas
 ISSUER = "lifeos"
 
 
@@ -105,7 +106,13 @@ class JwtService:
                 key,
                 algorithms=[ALGORITHM],
                 issuer=ISSUER,
-                options={"verify_exp": False, "require": ["exp", "iat", "sub", "sid", "ver", "jti"]},
+                # Time claims are checked below against the injected Clock, never the library's wall clock.
+                options={
+                    "verify_exp": False,
+                    "verify_iat": False,
+                    "verify_nbf": False,
+                    "require": ["exp", "iat", "sub", "sid", "ver", "jti"],
+                },
             )
             claims = AccessClaims(
                 user_id=uuid.UUID(payload["sub"]),
@@ -117,6 +124,9 @@ class JwtService:
             )
         except (jwt.PyJWTError, ValueError, KeyError, TypeError) as exc:
             raise TokenError("invalid token") from exc
-        if self._clock.now().timestamp() >= claims.expires_at:
+        now = self._clock.now().timestamp()
+        if now >= claims.expires_at:
             raise TokenError("token expired")
+        if claims.issued_at > now + MAX_CLOCK_SKEW_SECONDS:
+            raise TokenError("token issued in the future")
         return claims

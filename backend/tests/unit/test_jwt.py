@@ -111,3 +111,20 @@ def test_load_signing_key_pem_and_ephemeral_fallback() -> None:
     )
     with pytest.raises(ValueError, match=r"Could not deserialize|Unable to load"):
         load_signing_key("k1", "not-a-pem", allow_ephemeral=False)
+
+
+def test_time_claims_use_injected_clock_not_wall_clock() -> None:
+    # A clock far ahead of real time (or a replica with skew) must not make its own tokens "not yet valid".
+    future = FrozenClock(datetime(2030, 1, 1, tzinfo=UTC))
+    svc = service(future)
+    assert svc.verify(svc.issue(USER, SID, 1)).user_id == USER
+
+
+def test_token_issued_in_the_future_rejected_beyond_skew() -> None:
+    key = Ed25519PrivateKey.generate()
+    ahead = FrozenClock(T0 + timedelta(minutes=5))
+    token = service(ahead, key=key).issue(USER, SID, 1)
+    with pytest.raises(TokenError, match="future"):
+        service(FrozenClock(T0), key=key).verify(token)
+    within_skew = service(FrozenClock(T0 + timedelta(seconds=30)), key=key).issue(USER, SID, 1)
+    assert service(FrozenClock(T0), key=key).verify(within_skew).user_id == USER

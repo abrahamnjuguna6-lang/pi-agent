@@ -115,3 +115,167 @@ def profile(p: Profile) -> dict[str, Any]:
     data["life_categories"] = list(p.life_categories)
     data["notification_prefs"] = p.notification_prefs.model_dump(mode="json")
     return data
+
+
+def routine_template(t: m.RoutineTemplate, entries: list[m.RoutineEntry] | None = None) -> dict[str, Any]:
+    data = {k: _v(getattr(t, k)) for k in ("id", "title", "created_at", "updated_at")}
+    data["active_days"] = list(t.active_days)
+    if entries is not None:
+        data["entries"] = [routine_entry(e) for e in entries]
+    return data
+
+
+def routine_entry(e: m.RoutineEntry) -> dict[str, Any]:
+    data = {
+        k: _v(getattr(e, k))
+        for k in (
+            "id",
+            "routine_template_id",
+            "title",
+            "start_time",
+            "end_time",
+            "sort_order",
+            "goal_id",
+            "habit_id",
+            "created_at",
+            "updated_at",
+        )
+    }
+    data["crosses_midnight"] = e.end_time < e.start_time
+    return data
+
+
+def habit(h: m.Habit, paused: bool | None = None) -> dict[str, Any]:
+    data = {
+        k: _v(getattr(h, k))
+        for k in (
+            "id",
+            "goal_id",
+            "project_id",
+            "title",
+            "recurrence_type",
+            "preferred_start",
+            "duration_minutes",
+            "frequency_target",
+            "start_date",
+            "end_date",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+    }
+    data["recurrence_days"] = list(h.recurrence_days) if h.recurrence_days else None
+    if paused is not None:
+        data["paused"] = paused
+    return data
+
+
+def daily_action(a: m.DailyAction) -> dict[str, Any]:
+    return {
+        k: _v(getattr(a, k))
+        for k in (
+            "id",
+            "title",
+            "date",
+            "occurrence_date",
+            "scheduled_start",
+            "scheduled_end",
+            "status",
+            "lifecycle_state",
+            "cancelled_at",
+            "source_type",
+            "source_id",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        )
+    }
+
+
+def checkin(c: m.CheckinRecord) -> dict[str, Any]:
+    return {
+        k: _v(getattr(c, k))
+        for k in (
+            "id",
+            "daily_action_id",
+            "previous_status",
+            "new_status",
+            "transition_source",
+            "note",
+            "created_at",
+        )
+    }
+
+
+def schedule_change(h: m.DailyActionScheduleHistory) -> dict[str, Any]:
+    return {
+        k: _v(getattr(h, k))
+        for k in (
+            "id",
+            "daily_action_id",
+            "change_type",
+            "previous_start",
+            "previous_end",
+            "new_start",
+            "new_end",
+            "changed_by",
+            "reason",
+            "changed_at",
+        )
+    }
+
+
+def habit_occurrence(r: m.HabitOccurrenceRecord) -> dict[str, Any]:
+    return {
+        k: _v(getattr(r, k))
+        for k in (
+            "id",
+            "habit_id",
+            "occurrence_date",
+            "daily_action_id",
+            "result",
+            "completion_percent",
+            "note",
+            "created_at",
+        )
+    }
+
+
+def habit_metrics(metrics: Any, pauses: list[m.HabitPausePeriod]) -> dict[str, Any]:
+    return {
+        "period_kind": metrics.period_kind,
+        "current_streak": metrics.current_streak,
+        "longest_streak": metrics.longest_streak,
+        "missed": metrics.missed,
+        "partials": metrics.partials,
+        "total_completions": metrics.total_completions,
+        "periods": [
+            {
+                "start": p.start.isoformat(),
+                "end": p.end.isoformat(),
+                "completed": p.completed,
+                "required": p.required,
+                "met": p.met,
+                "excluded": p.excluded,
+                "in_progress": p.in_progress,
+            }
+            for p in metrics.periods
+        ],
+        "pause_periods": [
+            {
+                "starts_on": p.starts_on.isoformat(),
+                "ends_on": p.ends_on.isoformat() if p.ends_on else None,
+                "reason": p.reason,
+            }
+            for p in pauses
+        ],
+    }
+
+
+def schedule_suggestion(x: m.ScheduleSuggestion) -> dict[str, Any]:
+    data = {
+        k: _v(getattr(x, k))
+        for k in ("id", "trigger_action_id", "local_date", "status", "decided_at", "created_at")
+    }
+    data["proposal"] = x.proposal
+    return data

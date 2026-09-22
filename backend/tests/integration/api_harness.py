@@ -70,6 +70,10 @@ class Api:
         tokens = await self.tokens(email)
         return AuthedClient(self.client, tokens["access_token"])
 
+    async def relogin(self, email: str) -> AuthedClient:
+        """Fresh access token for an existing user (e.g. after moving the clock past token expiry)."""
+        return AuthedClient(self.client, (await self.tokens(email))["access_token"])
+
 
 @dataclass
 class AuthedClient:

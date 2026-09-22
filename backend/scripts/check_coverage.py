@@ -27,6 +27,7 @@ STRICT_BRANCH_MODULES: tuple[str, ...] = (
     "src/lifeos/domain/timeutil.py",  # T3.4
     "src/lifeos/domain/progress.py",  # T4.3
     "src/lifeos/domain/analytics/completion.py",  # T5.8
+    "src/lifeos/domain/habit_metrics.py",  # T5.9
     "src/lifeos/notifications/policy.py",  # T9.1
 )
 

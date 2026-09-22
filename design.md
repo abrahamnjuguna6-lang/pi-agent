@@ -980,7 +980,9 @@ Every Daily Action carries an immutable `source_type`, `source_id`, and `occurre
 | `TASK` | Task ID | User-scheduled Task |
 | `MANUAL` | NULL | User-created one-off action or a Routine Exception `added` entry (Section 44, item 1) |
 
-Generated Daily Actions are unique per `(user_id, source_type, source_id, occurrence_date)`, so generation jobs are idempotent. A Daily Action rescheduled to another date keeps its `occurrence_date`. Its `date` (the scheduled local date) changes, so it does not collide with that date's own occurrence.
+**Active** generated Daily Actions are unique per `(user_id, source_type, source_id, occurrence_date)`, so generation jobs are idempotent. A Daily Action rescheduled to another date keeps its `occurrence_date`. Its `date` (the scheduled local date) changes, so it does not collide with that date's own occurrence.
+
+Daily Actions are never deleted, because their Check-in Records are append-only (Section 24.1). A system-cancelled occurrence (for example, cancelled by a habit pause) leaves the unique index and may be regenerated later. A **User** cancellation also writes a `removed` Routine Exception or Habit override, which the generator honours, so user cancellations are never regenerated.
 
 ### 12.2 Source-Aware Rescheduling
 
@@ -1022,8 +1024,9 @@ The Personal Assistant resolves "Move my 4 PM learning session to 6 PM" as follo
 
 When the User changes timezone, `ProfileService` performs the following in one transaction:
 - Keeps all past Daily Actions, Check-in Records, and timestamps unchanged.
-- **ROUTINE_ENTRY and HABIT Daily Actions** for dates after today (new local date) that are still Planned and never rescheduled are deleted and regenerated in the new timezone.
-- **TASK and MANUAL Daily Actions** for future dates, and remaining Planned actions today, keep their local wall-clock time. Their UTC instants are recomputed and a schedule-history row is written with `changed_by='system'` and reason `timezone_change`.
+- **Every active, Planned Daily Action that has not started yet** (`scheduled_start` in the future), whatever its source, keeps its local calendar date and local wall-clock time. Its UTC instants are recomputed in the new timezone (DST policy of Section 20.3), and a schedule-history row is written with `change_type='timezone_change'` and `changed_by='System'`.
+  - For untouched Routine and Habit occurrences, this equals regenerating them from their definition.
+  - Actions are re-anchored in place rather than deleted, because Check-in Records are append-only (Section 12.1).
 - Future scheduler triggers are recomputed automatically, because sweepers resolve local times at execution (Section 20.3).
 
 ---
@@ -1302,7 +1305,7 @@ Pause periods are excluded from all of these: pause days neither break nor exten
 ### 17.4 Pauses
 
 - `pause_habit` opens a `habit_pause_periods` row (`starts_on`, `ends_on` nullable). `resume_habit` closes it.
-- Pausing deletes the Habit's future, untouched Planned Daily Actions from `starts_on` onward. It records schedule-history rows with reason `habit_paused`.
+- Pausing **cancels** the Habit's future Planned Daily Actions from `starts_on` onward (`lifecycle_state='cancelled'`, schedule-history `change_type='habit_paused'`, `changed_by='System'`). Resuming lets the generator create fresh occurrences again, because the index only constrains active rows (Section 12.1).
 - Accountability ignores pause days (Section 14.2), and the Completion Rate never sees them.
 
 ---
@@ -2040,9 +2043,9 @@ CREATE TABLE daily_actions (
     CHECK ((source_type = 'MANUAL') = (source_id IS NULL)),
     CHECK ((lifecycle_state = 'cancelled') = (cancelled_at IS NOT NULL))
 );
-CREATE UNIQUE INDEX uq_daily_actions_occurrence
+CREATE UNIQUE INDEX uq_daily_actions_occurrence            -- one ACTIVE action per source occurrence
     ON daily_actions (user_id, source_type, source_id, occurrence_date)
-    WHERE source_type IN ('ROUTINE_ENTRY','HABIT','TASK');
+    WHERE source_type IN ('ROUTINE_ENTRY','HABIT','TASK') AND lifecycle_state = 'active';
 
 ALTER TABLE habit_occurrence_records
     ADD FOREIGN KEY (daily_action_id) REFERENCES daily_actions(id) ON DELETE SET NULL;

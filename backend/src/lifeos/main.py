@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from lifeos.api.errors import install_error_handlers
-from lifeos.api.routers import auth, goals, me
+from lifeos.api.routers import auth, goals, me, scheduling
 from lifeos.config import get_settings
 from lifeos.container import Container, build_container
 
@@ -40,6 +40,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(me.router, prefix=API_PREFIX)
     app.include_router(goals.router, prefix=API_PREFIX)
+    app.include_router(scheduling.router, prefix=API_PREFIX)
     return app
 
 
