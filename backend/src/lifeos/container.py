@@ -24,6 +24,8 @@ from lifeos.domain.goals import GoalService, ProjectService
 from lifeos.domain.habits import HabitService, habit_sync_hook
 from lifeos.domain.idempotency import IdempotencyService
 from lifeos.domain.integrity import IntegrityService
+from lifeos.domain.memory.embeddings import Embedder, EmbeddingBackfill, OpenAIEmbedder
+from lifeos.domain.memory.search import MemorySearch
 from lifeos.domain.memory.service import MemoryService
 from lifeos.domain.objectives import ObjectiveService
 from lifeos.domain.profile import ProfileService
@@ -35,6 +37,7 @@ from lifeos.domain.schedule.suggestions import SuggestionService
 from lifeos.domain.schedule.timezone_change import TimezoneChangeService
 from lifeos.domain.tasks import TaskService, task_sync_hook
 from lifeos.events.consumer import OutboxConsumer
+from lifeos.events.handlers.memory import MemoryEventHandlers
 from lifeos.notifications.email import EmailSender, LoggingEmailSender
 from lifeos.security.crypto import EnvelopeCipher, LocalKeyProvider
 from lifeos.security.hashing import KeyedHasher, PasswordHasher
@@ -69,6 +72,9 @@ class Container:
     reschedule: RescheduleService
     suggestions: SuggestionService
     memory: MemoryService
+    memory_search: MemorySearch
+    embedder: Embedder
+    embedding_backfill: EmbeddingBackfill
     integrity: IntegrityService
     commitments: CommitmentService
     accountability: AccountabilityService
@@ -85,6 +91,7 @@ def build_container(
     redis: Redis | None = None,
     clock: Clock | None = None,
     email: EmailSender | None = None,
+    embedder: Embedder | None = None,
 ) -> Container:
     dev = settings.environment in ("development", "test")
     maker = sessionmaker or get_sessionmaker()
@@ -105,6 +112,8 @@ def build_container(
     cache = SessionCache(redis_client, ttl_seconds=jwt.ttl_seconds + 60)
     mail = email or LoggingEmailSender()
     memory = MemoryService(clk)
+    embeddings = embedder or OpenAIEmbedder(settings)
+    memory_events = MemoryEventHandlers(memory)
     integrity = IntegrityService(clk)
     commitments = CommitmentService(clk, integrity, memory)
     accountability = AccountabilityService(clk, memory)
@@ -152,8 +161,18 @@ def build_container(
         reschedule=reschedule,
         suggestions=suggestions,
         memory=memory,
+        memory_search=MemorySearch(embeddings),
+        embedder=embeddings,
+        embedding_backfill=EmbeddingBackfill(clk, embeddings),
         integrity=integrity,
         commitments=commitments,
         accountability=accountability,
-        outbox=OutboxConsumer(maker, clk, {"daily_action.status_changed": [suggestions.on_status_changed]}),
+        outbox=OutboxConsumer(
+            maker,
+            clk,
+            {
+                "daily_action.status_changed": [suggestions.on_status_changed, memory_events.on_checkin],
+                "reflection.submitted": [memory_events.on_reflection],
+            },
+        ),
     )

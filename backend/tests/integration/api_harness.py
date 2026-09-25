@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from lifeos.config import Settings
 from lifeos.container import Container, build_container
 from lifeos.domain.clock import FrozenClock
+from lifeos.domain.memory.embeddings import FakeEmbedder
 from lifeos.main import create_app
 from lifeos.notifications.email import InMemoryEmailSender
 from tests.conftest import TEST_ENV
@@ -38,6 +39,7 @@ class Api:
     container: Container
     clock: FrozenClock
     email: InMemoryEmailSender
+    embedder: FakeEmbedder
 
     async def register(self, email: str, password: str = PASSWORD) -> httpx.Response:
         return await self.client.post("/api/v1/auth/register", json={"email": email, "password": password})
@@ -113,11 +115,15 @@ async def api(db: async_sessionmaker[AsyncSession], redis_url: str) -> AsyncIter
     await redis.flushdb()
     clock = FrozenClock(T0)
     email = InMemoryEmailSender()
-    container = build_container(test_settings(), sessionmaker=db, redis=redis, clock=clock, email=email)
+    settings = test_settings()
+    embedder = FakeEmbedder(dimensions=settings.embedding_dimensions)
+    container = build_container(
+        settings, sessionmaker=db, redis=redis, clock=clock, email=email, embedder=embedder
+    )
     app = create_app(container)
     app.state.container = container  # ASGITransport does not run the lifespan
     transport = httpx.ASGITransport(app=app, client=("203.0.113.7", 50000))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        yield Api(client=client, container=container, clock=clock, email=email)
+        yield Api(client=client, container=container, clock=clock, email=email, embedder=embedder)
     await redis.flushdb()
     await redis.aclose()

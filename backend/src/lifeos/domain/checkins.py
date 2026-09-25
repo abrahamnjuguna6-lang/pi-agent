@@ -136,6 +136,9 @@ class CheckinService:
             user_id,
             {
                 "daily_action_id": str(action.id),
+                "checkin_id": str(record.id),
+                "title": action.title,
+                "note": cleaned,
                 "previous_status": previous,
                 "new_status": new_status,
                 "source_type": action.source_type,

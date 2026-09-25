@@ -505,7 +505,8 @@ infra/
 
 ## M7 — Memory Store
 
-### [ ] T7.1 Embedding client and backfill
+### [x] T7.1 Embedding client and backfill
+> **Implementation note:** `Embedder` is a Protocol with `OpenAIEmbedder` (built lazily, so importing the container needs no API key) and `FakeEmbedder`, which is deterministic (SHA-256 seeded), supports pinned `overrides` for exact-similarity tests and `fail_on` for the failure path. The integration harness injects the fake, so no test ever calls a provider. A failed batch stays `failed` and is retried by the next pass; the sweeper cadence (T10.2) is the throttle.
 - **Req:** R4.4 · **Design:** §23.3, §34.1 · **Depends:** T1.2
 - **References:** `S:lc-fund`, `D:models`
 - **Files:** `domain/memory/embeddings.py`
@@ -515,7 +516,8 @@ infra/
 - **Tests:** `tests/unit/test_embedder_fake.py` checks that the fake is deterministic. `tests/integration/test_embedding_backfill.py` checks pending → ready and failure → retry.
 - **Done when:** the tests pass.
 
-### [ ] T7.2 MemoryService create, browse, delete
+### [x] T7.2 MemoryService create, browse, delete
+> **Implementation note:** `create()` was introduced early in M6 and is completed here with clamping (model-proposed importance 1–7 and confidence 0.3–0.8), editing, superseding and hard delete. `create_once()` keys on the source record so at-least-once event handlers cannot duplicate an entry. Editing the content re-queues the embedding. The delete phrase is `X-Confirm-Phrase: DELETE` and a missing or wrong phrase returns the new `CONFIRMATION_REQUIRED` (400) code (design §23.6, §26.3 updated). The architecture test walks `src/lifeos` instead of shelling out to grep.
 - **Req:** R4.1–4.3, R4.6–4.8, R18.8, R18.11 · **Design:** §10.7, §23.1–23.2, §23.5–23.6 · **Depends:** T7.1, T3.2
 - **Files:** `domain/memory/service.py`, `api/routers/memory.py`
 - **Steps:**
@@ -526,7 +528,8 @@ infra/
 - **Tests:** `tests/unit/test_memory_rules.py` checks AI-inferred ⇒ inference, the defaults, and the clamping. `tests/integration/test_memory_api.py` checks filters, delete without the phrase returning 400, delete removing the embedding, and an architecture test proving that no module other than `domain/memory/service.py` inserts into `memory_store_entries` (a grep-based test).
 - **Done when:** the tests pass.
 
-### [ ] T7.3 Semantic search
+### [x] T7.3 Semantic search
+> **Implementation note:** the threshold is applied in SQL, so `k` counts only results above it. Tests pin vectors through the fake embedder (`mix(axis, similarity)`), which makes the threshold boundary exact rather than model-dependent. The HNSW `iterative_scan` branch is selected by corpus size; with test corpora it stays on the exact path.
 - **Req:** R4.5, R4.9, R15.10 · **Design:** §23.4 · **Depends:** T7.2
 - **Files:** `domain/memory/search.py`
 - **Steps:**
@@ -535,7 +538,8 @@ infra/
 - **Tests:** `tests/integration/test_memory_search.py` uses fake vectors to check ordering, threshold filtering, user isolation, the pending exclusion, and type filters.
 - **Done when:** the tests pass.
 
-### [ ] T7.4 Automatic memory paths: reflections and check-in notes
+### [x] T7.4 Automatic memory paths: reflections and check-in notes
+> **Implementation note:** `daily_action.status_changed` now carries `checkin_id`, `title` and `note`, so the handler can write the entry with its Daily Action context (design §23.3) and deduplicate on the Check-in Record. The accountability reflection keeps writing its own entry inside the submitting transaction (design §19.8), so the `reflection.submitted` handler skips `type='accountability'`; daily and CEO reflections go through the handler (the flows land in T13.5 and T13.8).
 - **Req:** R4.4, R11.5 · **Design:** §10.7 · **Depends:** T7.2, T5.4
 - **Files:** `events/handlers/memory.py`
 - **Steps:** event handlers create a Memory entry for each check-in note or skip reason (type Fact) and for each submitted reflection (type Reflection, wired in T13.5). Categories come from lineage.

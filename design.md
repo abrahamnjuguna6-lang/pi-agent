@@ -1704,7 +1704,8 @@ Section 10.7 lists every permitted creation path. No other code path may insert 
 - Entries are embedded asynchronously. The row is inserted with `embedding_status='pending'`, and `embedding_backfill` completes it within about 1 minute. Search excludes pending rows.
 - The embedding model and dimension are fixed per deployment (`text-embedding-3-small`, 1536 dimensions, by default). The column is `vector(1536)`.
 - Changing the model is a controlled migration: add a new column, backfill it, switch reads, then drop the old column.
-- Check-in notes and skip reasons (R4.4) are embedded together with their Daily Action title and local date as context.
+- Check-in notes and skip reasons (R4.4) are embedded together with their Daily Action title and local date as context. That context is written into `content` itself ("Run on 2026-09-21 — skipped: knee pain"), so the stored text and its vector always agree.
+- Editing an entry's content sets `embedding_status='pending'` again, so a stale vector is never searchable.
 
 ### 23.4 Semantic Search (R4.5, R4.9, R15.10)
 
@@ -1722,7 +1723,8 @@ Section 10.7 lists every permitted creation path. No other code path may insert 
 ### 23.6 Browse and Delete (R18.8, R18.11)
 
 - The Memory Browser lists entries filterable by type, source, and category, with keyword search.
-- An individual entry is deleted only after strong confirmation, either in the UI or through `delete_memory_entry`, which is in the destructive tier. Deletion hard-deletes the row and its embedding in the same transaction.
+- An individual entry is deleted only after strong confirmation, either in the UI or through `delete_memory_entry`, which is in the destructive tier. `DELETE /memory/{id}` requires the `X-Confirm-Phrase: DELETE` header, echoing the phrase the client showed the User; without it the request is rejected with `CONFIRMATION_REQUIRED` (400). Deletion hard-deletes the row and its embedding in the same transaction.
+- **Supersede** replaces an entry without losing it (re-onboarding): the old row stays, `superseded_by` points at the replacement, and browse and search skip superseded rows unless they are asked for explicitly.
 - Deletion does not delete the originating record, such as a Reflection. The UI states this and offers a link to delete the source separately.
 
 ---
@@ -2771,6 +2773,7 @@ POST                /memory-proposals/{id}/accept | /reject
 
 # Memory (R4, R18.8, R18.11)
 GET|POST            /memory                         # browse: type, source, category, q
+GET                 /memory/search                  # semantic search: q, k, threshold, type (R4.5)
 GET|PATCH           /memory/{id}                    # PATCH: importance, content (User-stated only)
 DELETE              /memory/{id}                    # requires X-Confirm-Phrase header
 
@@ -2829,12 +2832,12 @@ Error:
 
 Stable error codes include:
 - `VALIDATION_ERROR`, `NOT_FOUND`, `INVALID_TRANSITION`, `INVALID_COMMITMENT_TRANSITION`
-- `SKIP_REASON_REQUIRED`, `GOAL_ARCHIVED`, `CASCADE_CONFIRMATION_REQUIRED`
+- `SKIP_REASON_REQUIRED`, `GOAL_ARCHIVED`, `CASCADE_CONFIRMATION_REQUIRED`, `CONFIRMATION_REQUIRED`
 - `REQUEST_IN_PROGRESS`, `IDEMPOTENCY_KEY_REUSED`, `EMAIL_NOT_VERIFIED`, `ACCOUNT_LOCKED`
 - `RATE_LIMITED`, `TURN_IN_PROGRESS`, `AI_UNAVAILABLE`
 - authentication: `UNAUTHENTICATED`, `INVALID_CREDENTIALS` (unknown email and wrong password are indistinguishable), `INVALID_TOKEN`, `EMAIL_TAKEN`, `WEAK_PASSWORD`, `FORBIDDEN`
 
-HTTP mapping: validation 422 · not-found 404 · state conflicts 409 · `EMAIL_NOT_VERIFIED`/`FORBIDDEN` 403 · `ACCOUNT_LOCKED` 423 · `RATE_LIMITED` 429 · authentication 401 (with `WWW-Authenticate: Bearer`) · `AI_UNAVAILABLE` 503 · unhandled 500 `INTERNAL_ERROR` with no internals.
+HTTP mapping: validation 422 · not-found 404 · state conflicts 409 · `CONFIRMATION_REQUIRED` 400 · `EMAIL_NOT_VERIFIED`/`FORBIDDEN` 403 · `ACCOUNT_LOCKED` 423 · `RATE_LIMITED` 429 · authentication 401 (with `WWW-Authenticate: Bearer`) · `AI_UNAVAILABLE` 503 · unhandled 500 `INTERNAL_ERROR` with no internals.
 
 ### 26.4 JSON Export (R18.1)
 

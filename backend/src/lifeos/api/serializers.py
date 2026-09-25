@@ -389,3 +389,30 @@ def reflection(r: m.Reflection) -> dict[str, Any]:
     return {
         k: _v(getattr(r, k)) for k in ("id", "date", "type", "content", "escalation_episode_id", "created_at")
     } | {"answers": r.answers, "goal_categories": list(r.goal_categories)}
+
+
+def memory_entry(e: m.MemoryStoreEntry) -> dict[str, Any]:
+    data = {
+        k: _v(getattr(e, k))
+        for k in (
+            "id",
+            "content",
+            "type",
+            "source",
+            "importance",
+            "confidence",
+            "is_inference",
+            "source_ref_type",
+            "source_ref_id",
+            "superseded_by",
+            "embedding_status",
+            "created_at",
+            "updated_at",
+        )
+    }
+    data["categories"] = list(e.categories)
+    return data
+
+
+def memory_hit(hit: Any) -> dict[str, Any]:
+    return memory_entry(hit.entry) | {"similarity": round(hit.similarity, 6)}
