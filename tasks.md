@@ -19,6 +19,11 @@ Each task has:
 
 Status markers: `[ ]` todo · `[~]` in progress · `[x]` done.
 
+Lines starting with `> **Implementation note:**` record a deviation from the design or a choice the
+spec left open. Where that choice could reasonably go the other way, the note ends with a
+`> **Revisit:**` pointer into [`docs/DECISIONS.md`](docs/DECISIONS.md), which holds the reasoning and
+says what should trigger a second look. Confirm or change those entries rather than deleting them.
+
 ### 0.2 Global Definition of Done (applies to every task)
 
 1. The code follows the repo layout (§0.4). `ruff`, the type checker (`pyright --strict` on `src/lifeos/domain` and `src/lifeos/toolbus`), and the tests pass in CI.
@@ -446,6 +451,7 @@ infra/
 
 ### [x] T6.1 CommitmentService lifecycle
 > **Implementation note:** Commitment evaluation is a **same-transaction** check-in hook (`CommitmentService.checkin_hook`), like Task/Habit sync. Daily Actions are never deleted, so "deleting a linked Daily Action" is cancellation: `RescheduleService`, `HabitService` (pause/delete) and `GoalService` (archive) take injected `cancel_hooks`, and `CommitmentService.cancel_hook` marks the links removed, adjusts the condition, re-evaluates and publishes `commitment.condition_changed` (M9 delivers the notification). Deadlines are applied before every explicit action and before condition evaluation, so a late completion cannot keep an overdue Commitment. Deferral also requires a due date later than the current one. `goal_category` comes from the new minimal `domain/lineage.py` (T8.3 extends it). The ledger uses a keyset cursor on the chosen sort key (`pagination.SortKey`), with `goal_category=Unlinked` for Commitments without a Goal.
+> **Revisit:** `docs/DECISIONS.md` D3 (a deferral must move the due date later than the current one) and D7 (only Planned/Started Daily Actions can be linked).
 - **Req:** R9.1–9.6, R9.8–9.10 · **Design:** §11.1–11.3, §24.7 · **Depends:** T5.4
 - **Files:** `domain/commitments.py`, `api/routers/commitments.py`
 - **Steps:**
@@ -459,6 +465,7 @@ infra/
 
 ### [x] T6.2 Commitment deadline evaluation
 > **Implementation note:** the explanation window starts at the end of the due local day, or when the System first observes the overdue Commitment if that is later, so a delayed sweep never shortens it (design §11.3 updated). The window expiring without a completed re-deferral breaks the Commitment even when an explanation was submitted without the acknowledgment (design §38.1). `evaluate_deadlines(user)` is the per-User sweep body; the worker job arrives in T10.2.
+> **Revisit:** `docs/DECISIONS.md` D1 (an expired window breaks the Commitment even when an explanation was submitted — R9.10 reads the other way) and D2 (the window starts at first observation when the sweep is late).
 - **Req:** R9.7, R9.10 · **Design:** §11.3 · **Depends:** T6.1
 - **Files:** `domain/commitments.py` (`evaluate_deadlines(user, now)`)
 - **Steps:**
@@ -469,6 +476,7 @@ infra/
 
 ### [x] T6.3 Integrity score and snapshots
 > **Implementation note:** `domain/integrity.py` holds the pure score plus `IntegrityService.refresh()`, which upserts today's snapshot and applies the threshold trigger; it runs after every Commitment transition and on `GET /integrity-score` (so the stored value is never stale), and the nightly `integrity_snapshot` job will call the same method in T10.2. Flags are written through the new minimal `domain/proactive.py` (`raise_flag`/`resolve_flags`, deduplicated on `user_id, dedupe_key`) instead of a stub; T13.1 adds surfacing and openers on top. The flag resolves when the score returns to the threshold.
+> **Revisit:** `docs/DECISIONS.md` D8 (`GET /integrity-score` refreshes today's snapshot, so a read can write a row and raise a flag).
 - **Req:** R9.11–9.14 · **Design:** §11.4–11.5, §16.6 · **Depends:** T6.1
 - **Files:** `domain/integrity.py`, `api/routers/integrity.py`
 - **Steps:**
@@ -481,6 +489,7 @@ infra/
 
 ### [x] T6.4 AccountabilityService: escalation engine
 > **Implementation note:** the engine is a pure function of the check-in outcomes (`evaluate`), so re-running it is idempotent by construction; it runs as a same-transaction check-in hook and as `evaluate_user(user)` for the sweeper (T10.2). Consecutive runs count only **resolved** occurrences and must end inside the 7-day window, and skips on or before the recovery anchor no longer escalate, which prevents reduce/re-escalate flapping (design §14.2 updated). State rows are kept at Level 1 once an episode ends. Level 1/2 triggers are returned as `OccurrenceTrigger`s with dedupe keys for the notification pipeline (T9.x) rather than sent from here.
+> **Revisit:** `docs/DECISIONS.md` D4 (runs count only resolved occurrences), D5 (skips before the recovery anchor never re-escalate) and D6 (rows persist at Level 1 once an episode ends).
 - **Req:** R8.1–8.8, R8.10 · **Design:** §14.2–14.4, §24.6 · **Depends:** T5.4, T5.9
 - **Files:** `domain/accountability.py`
 - **Steps:**
@@ -518,6 +527,7 @@ infra/
 
 ### [x] T7.2 MemoryService create, browse, delete
 > **Implementation note:** `create()` was introduced early in M6 and is completed here with clamping (model-proposed importance 1–7 and confidence 0.3–0.8), editing, superseding and hard delete. `create_once()` keys on the source record so at-least-once event handlers cannot duplicate an entry. Editing the content re-queues the embedding. The delete phrase is `X-Confirm-Phrase: DELETE` and a missing or wrong phrase returns the new `CONFIRMATION_REQUIRED` (400) code (design §23.6, §26.3 updated). The architecture test walks `src/lifeos` instead of shelling out to grep.
+> **Revisit:** `docs/DECISIONS.md` D10 (the new `CONFIRMATION_REQUIRED` 400 code and the placeholder `DELETE` phrase) and D12 (failed embeddings retry forever, with no attempt counter).
 - **Req:** R4.1–4.3, R4.6–4.8, R18.8, R18.11 · **Design:** §10.7, §23.1–23.2, §23.5–23.6 · **Depends:** T7.1, T3.2
 - **Files:** `domain/memory/service.py`, `api/routers/memory.py`
 - **Steps:**
@@ -540,6 +550,7 @@ infra/
 
 ### [x] T7.4 Automatic memory paths: reflections and check-in notes
 > **Implementation note:** `daily_action.status_changed` now carries `checkin_id`, `title` and `note`, so the handler can write the entry with its Daily Action context (design §23.3) and deduplicate on the Check-in Record. The accountability reflection keeps writing its own entry inside the submitting transaction (design §19.8), so the `reflection.submitted` handler skips `type='accountability'`; daily and CEO reflections go through the handler (the flows land in T13.5 and T13.8).
+> **Revisit:** `docs/DECISIONS.md` D9 (the Check-in note context is written into `content`) and D11 (the accountability reflection writes its entry inline).
 - **Req:** R4.4, R11.5 · **Design:** §10.7 · **Depends:** T7.2, T5.4
 - **Files:** `events/handlers/memory.py`
 - **Steps:** event handlers create a Memory entry for each check-in note or skip reason (type Fact) and for each submitted reflection (type Reflection, wired in T13.5). Categories come from lineage.
