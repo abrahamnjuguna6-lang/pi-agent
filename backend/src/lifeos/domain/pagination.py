@@ -1,10 +1,12 @@
-"""Keyset (cursor) pagination on (created_at, id) — stable under concurrent inserts (design §26.1)."""
+"""Keyset (cursor) pagination on (created_at, id) or a chosen sort key — stable under concurrent inserts
+(design §26.1)."""
 
 from __future__ import annotations
 
 import base64
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Generic, TypeVar
@@ -66,3 +68,56 @@ def to_page(rows: list[Any], limit: int) -> Page[Any]:
         return Page(rows, None)
     last = rows[limit - 1]
     return Page(rows[:limit], encode_cursor(last.created_at, last.id))
+
+
+# --------------------------------------------------------------------------- keyset on a chosen sort key
+
+
+@dataclass(frozen=True)
+class SortKey:
+    """A sortable column for keyset pagination: `value` reads it from a row as a string, and `parse`
+    turns the cursor string back into a comparable SQL value. The column must be NOT NULL (coalesce)."""
+
+    expr: Any  # an ORM column or SQL expression (e.g. coalesce) to sort and compare on
+    value: Callable[[Any], str]
+    parse: Callable[[str], Any]
+
+
+def encode_sort_cursor(value: str, row_id: uuid.UUID) -> str:
+    raw = json.dumps({"v": value, "i": str(row_id)}).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_sort_cursor(cursor: str, key: SortKey) -> tuple[Any, uuid.UUID]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        data = json.loads(base64.urlsafe_b64decode(padded))
+        return key.parse(data["v"]), uuid.UUID(data["i"])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise DomainError("VALIDATION_ERROR", "Invalid cursor", {"field": "cursor"}) from exc
+
+
+def keyset_sorted(
+    query: Select[Any],
+    key: SortKey,
+    row_id: InstrumentedAttribute[uuid.UUID],
+    cursor: str | None,
+    limit: int,
+    descending: bool,
+) -> Select[Any]:
+    """(sort key, id) order in either direction; fetch limit+1 to detect a next page."""
+    if cursor:
+        value, c_id = decode_sort_cursor(cursor, key)
+        if descending:
+            query = query.where(or_(key.expr < value, and_(key.expr == value, row_id < c_id)))
+        else:
+            query = query.where(or_(key.expr > value, and_(key.expr == value, row_id > c_id)))
+    order = (key.expr.desc(), row_id.desc()) if descending else (key.expr.asc(), row_id.asc())
+    return query.order_by(*order).limit(limit + 1)
+
+
+def to_sorted_page(rows: list[Any], limit: int, key: SortKey) -> Page[Any]:
+    if len(rows) <= limit:
+        return Page(rows, None)
+    last = rows[limit - 1]
+    return Page(rows[:limit], encode_sort_cursor(key.value(last), last.id))

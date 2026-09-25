@@ -16,7 +16,7 @@ from lifeos.domain.clock import Clock
 from lifeos.domain.errors import DomainError, NotFoundError
 from lifeos.domain.goals import ensure_writable, get_goal, get_project, goal_of_project
 from lifeos.domain.habit_metrics import HabitDefinition, HabitMetrics, compute_metrics
-from lifeos.domain.schedule.common import system_cancel, user_timezone
+from lifeos.domain.schedule.common import CancelHook, system_cancel, user_timezone
 from lifeos.domain.timeutil import local_date
 
 RECURRENCE_TYPES = ("daily", "weekly", "custom")
@@ -62,8 +62,9 @@ def validate_recurrence(
 
 
 class HabitService:
-    def __init__(self, clock: Clock) -> None:
+    def __init__(self, clock: Clock, cancel_hooks: list[CancelHook] | None = None) -> None:
         self._clock = clock
+        self._cancel_hooks = list(cancel_hooks or [])
 
     async def _check_parent(
         self, s: AsyncSession, user_id: uuid.UUID, goal_id: uuid.UUID | None, project_id: uuid.UUID | None
@@ -342,8 +343,12 @@ class HabitService:
         )
         if from_date is not None:
             query = query.where(m.DailyAction.date >= from_date)
-        for action in (await s.execute(query)).scalars():
+        cancelled = list((await s.execute(query)).scalars())
+        for action in cancelled:
             system_cancel(s, action, change_type, reason, now)  # type: ignore[arg-type]
+        await s.flush()
+        for hook in self._cancel_hooks:
+            await hook(s, habit.user_id, cancelled, "System", reason)
 
 
 # --------------------------------------------------------------------------- occurrences & metrics (T5.9)

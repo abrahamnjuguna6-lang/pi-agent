@@ -9,6 +9,8 @@ EventType = Literal[
     "daily_action.rescheduled",
     "daily_action.cancelled",
     "commitment.status_changed",
+    "commitment.condition_changed",
+    "commitment.explanation_window_opened",
     "objective.value_changed",
     "escalation.level_changed",
     "reflection.submitted",

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lifeos.db import models as m
 from lifeos.domain.clock import Clock
 from lifeos.domain.errors import DomainError, NotFoundError
-from lifeos.domain.schedule.common import system_cancel
+from lifeos.domain.schedule.common import CancelHook, system_cancel
 
 GoalCategory = Literal["Life", "Career", "Personal", "Spiritual", "Fitness", "Family"]
 GoalStatus = Literal["active", "archived", "completed"]
@@ -134,8 +134,9 @@ class HierarchyNode:
 
 
 class GoalService:
-    def __init__(self, clock: Clock) -> None:
+    def __init__(self, clock: Clock, cancel_hooks: list[CancelHook] | None = None) -> None:
         self._clock = clock
+        self._cancel_hooks = list(cancel_hooks or [])
 
     async def create(self, s: AsyncSession, user_id: uuid.UUID, data: dict[str, Any]) -> m.Goal:
         now = self._clock.now()
@@ -230,8 +231,12 @@ class GoalService:
                 )
             )
         ).scalars()
-        for action in future:
+        cancelled = list(future)
+        for action in cancelled:
             system_cancel(s, action, "cancelled", "goal_archived", now)
+        await s.flush()
+        for hook in self._cancel_hooks:
+            await hook(s, user_id, cancelled, "System", "goal_archived")
 
     async def cascade_counts(self, s: AsyncSession, user_id: uuid.UUID, goal_id: uuid.UUID) -> CascadeCounts:
         live_objectives = select(m.Objective.id).where(

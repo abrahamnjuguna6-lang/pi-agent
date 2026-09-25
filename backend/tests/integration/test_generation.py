@@ -117,3 +117,15 @@ async def test_archived_goal_habits_are_not_generated(api: Api) -> None:
     goal_id, _ = await goal_with_habit(me)
     await me.post(f"/goals/{goal_id}/archive")
     assert await generate(api, me) == 0
+
+
+async def test_generation_survives_server_side_prepared_statements(api: Api) -> None:
+    """Regression: psycopg prepares a statement after a few executions, and PostgreSQL then plans it
+    generically. The occurrence upsert must still match the partial unique index, so its ON CONFLICT
+    predicate is literal SQL rather than bound parameters."""
+    me = await api.as_user("lee@example.com")
+    await goal_with_habit(me, start_date="2026-09-01")
+    week = [date(2026, 9, 14) + timedelta(days=offset) for offset in range(7)]
+    assert await generate(api, me, *week) == 7  # more executions than psycopg's prepare threshold
+    assert await generate(api, me, date(2026, 9, 22)) == 1  # the prepared statement is reused here
+    assert await generate(api, me, *week) == 0  # still idempotent

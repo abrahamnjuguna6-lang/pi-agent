@@ -279,3 +279,113 @@ def schedule_suggestion(x: m.ScheduleSuggestion) -> dict[str, Any]:
     }
     data["proposal"] = x.proposal
     return data
+
+
+def commitment(c: m.Commitment) -> dict[str, Any]:
+    return {
+        k: _v(getattr(c, k))
+        for k in (
+            "id",
+            "title",
+            "source",
+            "due_date",
+            "current_due_date",
+            "completion_condition",
+            "status",
+            "deferral_count",
+            "explanation_window_ends_at",
+            "goal_category",
+            "kept_at",
+            "broken_at",
+            "cancelled_at",
+            "created_at",
+            "updated_at",
+        )
+    }
+
+
+def commitment_link(link: m.CommitmentLink) -> dict[str, Any]:
+    return {
+        k: _v(getattr(link, k)) for k in ("id", "entity_type", "entity_id", "removed_at", "removed_reason")
+    }
+
+
+def commitment_event(e: m.CommitmentEvent) -> dict[str, Any]:
+    return {
+        k: _v(getattr(e, k))
+        for k in (
+            "id",
+            "event_type",
+            "previous_status",
+            "new_status",
+            "previous_due",
+            "new_due",
+            "explanation",
+            "actor",
+            "created_at",
+        )
+    }
+
+
+def commitment_detail(detail: Any) -> dict[str, Any]:
+    return commitment(detail.commitment) | {
+        "links": [commitment_link(link) for link in detail.links],
+        "events": [commitment_event(e) for e in detail.events],
+    }
+
+
+def integrity_snapshot(snapshot: m.IntegrityScoreSnapshot) -> dict[str, Any]:
+    return {
+        k: _v(getattr(snapshot, k))
+        for k in ("local_date", "score", "kept", "broken", "overdue_deferred", "computed_at")
+    }
+
+
+def integrity_overview(overview: dict[str, Any]) -> dict[str, Any]:
+    return integrity_snapshot(overview["current"]) | {
+        "threshold": overview["threshold"],
+        "below_threshold": _below(overview["current"].score, overview["threshold"]),
+        "trend": {
+            "baseline_date": _v(overview["baseline_date"]),
+            "baseline_score": _v(overview["baseline_score"]),
+            "delta": _v(overview["delta"]),
+        },
+        "series": [integrity_snapshot(row) for row in overview["series"]],
+    }
+
+
+def _below(score: Any, threshold: int) -> bool:
+    return score is not None and score < threshold
+
+
+def escalation(view: Any) -> dict[str, Any]:
+    state = view.state
+    return {
+        k: _v(getattr(state, k))
+        for k in (
+            "id",
+            "source_type",
+            "source_id",
+            "level",
+            "escalation_episode_id",
+            "episode_started_at",
+            "reflection_required",
+            "reflection_completed_at",
+            "reflection_id",
+            "recovery_window_anchor_date",
+            "last_reduced_at",
+            "last_evaluated_at",
+            "created_at",
+            "updated_at",
+        )
+    } | {
+        "source_title": view.source_title,
+        "goal_id": _v(view.goal_id),
+        "skips": [{"date": day.isoformat(), "reason": reason} for day, reason in view.skips],
+    }
+
+
+def reflection(r: m.Reflection) -> dict[str, Any]:
+    return {
+        k: _v(getattr(r, k)) for k in ("id", "date", "type", "content", "escalation_episode_id", "created_at")
+    } | {"answers": r.answers, "goal_categories": list(r.goal_categories)}

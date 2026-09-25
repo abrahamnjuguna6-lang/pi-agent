@@ -12,13 +12,21 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy import and_, select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lifeos.db import models as m
 from lifeos.domain.clock import Clock
 from lifeos.domain.timeutil import block_instants, local_date, local_weekday_sunday0
+
+# Arbiter predicate of `uq_daily_actions_occurrence`, written as literal SQL on purpose: PostgreSQL can
+# only match a partial unique index when it can prove the ON CONFLICT predicate implies the index
+# predicate, which it cannot do for bound parameters once psycopg prepares the statement server-side
+# (it then fails with "no unique or exclusion constraint matching the ON CONFLICT specification").
+OCCURRENCE_INDEX_WHERE = text(
+    "source_type IN ('ROUTINE_ENTRY','HABIT','TASK') AND lifecycle_state = 'active'"
+)
 
 DEFAULT_HABIT_START = time(8, 0)
 DEFAULT_HABIT_MINUTES = 30
@@ -310,10 +318,7 @@ class GenerationService:
                     )
                     .on_conflict_do_nothing(
                         index_elements=["user_id", "source_type", "source_id", "occurrence_date"],
-                        index_where=and_(
-                            m.DailyAction.source_type.in_(["ROUTINE_ENTRY", "HABIT", "TASK"]),
-                            m.DailyAction.lifecycle_state == "active",
-                        ),
+                        index_where=OCCURRENCE_INDEX_WHERE,
                     )
                     .returning(m.DailyAction.id)
                 )

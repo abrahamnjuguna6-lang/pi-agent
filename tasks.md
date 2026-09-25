@@ -362,6 +362,7 @@ infra/
 - **Done when:** the tests pass.
 
 ### [x] T5.3 Daily Action generation (Routine Instances and Habits)
+> **Bug fix (found in M6):** the occurrence upsert inferred its partial unique index from a predicate built with bound parameters. Once psycopg prepared the statement server-side (after ~5 executions on a connection), PostgreSQL could no longer prove the predicate implied the index and generation failed with "no unique or exclusion constraint matching the ON CONFLICT specification". The predicate is now literal SQL (`OCCURRENCE_INDEX_WHERE`), covered by `test_generation_survives_server_side_prepared_statements`.
 - **Req:** R1.13, R2.3–2.4 · **Design:** §12.1, §17.1, §20.2 · **Depends:** T5.1, T5.2, T3.4
 - **Files:** `domain/schedule/generation.py`
 - **Steps:**
@@ -443,7 +444,8 @@ infra/
 
 ## M6 — Commitments, Integrity, Accountability
 
-### [ ] T6.1 CommitmentService lifecycle
+### [x] T6.1 CommitmentService lifecycle
+> **Implementation note:** Commitment evaluation is a **same-transaction** check-in hook (`CommitmentService.checkin_hook`), like Task/Habit sync. Daily Actions are never deleted, so "deleting a linked Daily Action" is cancellation: `RescheduleService`, `HabitService` (pause/delete) and `GoalService` (archive) take injected `cancel_hooks`, and `CommitmentService.cancel_hook` marks the links removed, adjusts the condition, re-evaluates and publishes `commitment.condition_changed` (M9 delivers the notification). Deadlines are applied before every explicit action and before condition evaluation, so a late completion cannot keep an overdue Commitment. Deferral also requires a due date later than the current one. `goal_category` comes from the new minimal `domain/lineage.py` (T8.3 extends it). The ledger uses a keyset cursor on the chosen sort key (`pagination.SortKey`), with `goal_category=Unlinked` for Commitments without a Goal.
 - **Req:** R9.1–9.6, R9.8–9.10 · **Design:** §11.1–11.3, §24.7 · **Depends:** T5.4
 - **Files:** `domain/commitments.py`, `api/routers/commitments.py`
 - **Steps:**
@@ -455,7 +457,8 @@ infra/
 - **Tests:** `tests/unit/test_commitment_transitions.py` covers the full commitment table in design §38.1 at **100% branch coverage**. `tests/integration/test_commitments.py` checks the `all` condition with a cancelled link and that a reschedule leaves the Commitment unchanged.
 - **Done when:** the tests pass and the coverage gate is enforced.
 
-### [ ] T6.2 Commitment deadline evaluation
+### [x] T6.2 Commitment deadline evaluation
+> **Implementation note:** the explanation window starts at the end of the due local day, or when the System first observes the overdue Commitment if that is later, so a delayed sweep never shortens it (design §11.3 updated). The window expiring without a completed re-deferral breaks the Commitment even when an explanation was submitted without the acknowledgment (design §38.1). `evaluate_deadlines(user)` is the per-User sweep body; the worker job arrives in T10.2.
 - **Req:** R9.7, R9.10 · **Design:** §11.3 · **Depends:** T6.1
 - **Files:** `domain/commitments.py` (`evaluate_deadlines(user, now)`)
 - **Steps:**
@@ -464,7 +467,8 @@ infra/
 - **Tests:** `tests/unit/test_deadline_eval.py` uses a frozen clock and covers local-midnight boundaries in 3 timezones.
 - **Done when:** the tests pass.
 
-### [ ] T6.3 Integrity score and snapshots
+### [x] T6.3 Integrity score and snapshots
+> **Implementation note:** `domain/integrity.py` holds the pure score plus `IntegrityService.refresh()`, which upserts today's snapshot and applies the threshold trigger; it runs after every Commitment transition and on `GET /integrity-score` (so the stored value is never stale), and the nightly `integrity_snapshot` job will call the same method in T10.2. Flags are written through the new minimal `domain/proactive.py` (`raise_flag`/`resolve_flags`, deduplicated on `user_id, dedupe_key`) instead of a stub; T13.1 adds surfacing and openers on top. The flag resolves when the score returns to the threshold.
 - **Req:** R9.11–9.14 · **Design:** §11.4–11.5, §16.6 · **Depends:** T6.1
 - **Files:** `domain/integrity.py`, `api/routers/integrity.py`
 - **Steps:**
@@ -475,7 +479,8 @@ infra/
 - **Tests:** `tests/unit/test_integrity_score.py` covers the window edges, a cancelled Commitment excluded, overdue deferred counted, rounding, and `null`. `tests/unit/test_threshold_crossing.py` checks that only a crossing emits a flag, deduplicated.
 - **Done when:** the tests pass.
 
-### [ ] T6.4 AccountabilityService: escalation engine
+### [x] T6.4 AccountabilityService: escalation engine
+> **Implementation note:** the engine is a pure function of the check-in outcomes (`evaluate`), so re-running it is idempotent by construction; it runs as a same-transaction check-in hook and as `evaluate_user(user)` for the sweeper (T10.2). Consecutive runs count only **resolved** occurrences and must end inside the 7-day window, and skips on or before the recovery anchor no longer escalate, which prevents reduce/re-escalate flapping (design §14.2 updated). State rows are kept at Level 1 once an episode ends. Level 1/2 triggers are returned as `OccurrenceTrigger`s with dedupe keys for the notification pipeline (T9.x) rather than sent from here.
 - **Req:** R8.1–8.8, R8.10 · **Design:** §14.2–14.4, §24.6 · **Depends:** T5.4, T5.9
 - **Files:** `domain/accountability.py`
 - **Steps:**
@@ -486,7 +491,8 @@ infra/
 - **Tests:** `tests/unit/test_escalation.py` covers the full escalation table in design §38.1 plus a Mon/Wed/Fri habit, a pause gap, repeated evaluation producing no double reduction, and 4 → 5 without a new reflection. It must reach **100% branch coverage**. `tests/integration/test_accountability_events.py` checks that a skip check-in updates the level in the same request cycle.
 - **Done when:** the tests pass and the coverage gate is enforced.
 
-### [ ] T6.5 Accountability reflection submission
+### [x] T6.5 Accountability reflection submission
+> **Implementation note:** a minimal `MemoryService.create()` (`domain/memory/service.py`) was implemented here rather than deferring the memory write, so the reflection and the Commitment explanation both go through the single entry point design §23.2 requires; T7.2 extends it with browse/delete/supersede and AI-inferred clamping. Submitting the reflection re-evaluates the source immediately, so a pending recovery applies at once. `GET /accountability/escalations/{id}` returns the skipped dates and reasons the §19.8 prompt shows.
 - **Req:** R8.5 · **Design:** §19.8 · **Depends:** T6.4, T7.2
 - **Files:** `domain/accountability.py`, `api/routers/accountability.py`
 - **Steps:**

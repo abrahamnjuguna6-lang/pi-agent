@@ -880,6 +880,7 @@ Any change to User-authored data proposed by the system is stored as a proposal 
 | Submitted Daily Reflection (R11.5) | Submission is the user action | Reflection / `User-stated` |
 | Check-in note or skip reason (R4.4) | The check-in is the user action | Fact / `User-stated` (categories inferred deterministically from the source Goal) |
 | Accountability reflection (Section 19.8) | Submission | Reflection / `User-stated` |
+| Commitment explanation (Section 11.3) | Submission | Fact / `User-stated` |
 | Completed Weekly CEO Meeting (R10.5) | Completion | Reflection / `System-derived` |
 | Onboarding answers (R16.5) | Final onboarding confirmation | per item / `User-stated` |
 | Level 5 Pattern Detection Report (R8.6) | Automatic, as required | Pattern / `AI-inferred` |
@@ -925,19 +926,20 @@ Any other transition is rejected with `INVALID_COMMITMENT_TRANSITION`. Every acc
 
 - The condition is chosen at creation and validated against the number of links. `all`/`any` is required for ≥ 2 links (R9.2).
 - Evaluation runs in the same transaction as the Daily Action status change (`daily_action.status_changed`). It records `kept_at`.
+- Evaluation applies the deadline rules (Section 11.3) first, so a Daily Action completed after the due date has passed finds the Commitment already Broken and cannot keep it.
 - A Commitment linked only to a Goal, Objective, Project, or Task (no Daily Actions) uses `explicit`.
 
 ### 11.3 Deadlines and Deferral (R9.7, R9.10)
 
 **Open past due:** the hourly `commitment_evaluation` job transitions Open Commitments whose due date (end of local day, in the User's timezone) has passed without satisfaction to **Broken**. It notifies the User (`commitment_breach`).
 
-**First deferral:** from Open, the User may defer once to a new explicit due date later than today. No explanation is required. `deferral_count = 1`.
+**First deferral:** from Open, the User may defer once to a new explicit due date later than today **and** later than the current due date. No explanation is required. `deferral_count = 1`.
 
 **Deferred past due:**
-1. When the deferred due date passes without satisfaction, the Commitment stays `Deferred` and enters an **explanation window** of 24 hours (configurable). `explanation_window_ends_at` is set and the User is notified: "Your deferred commitment is overdue — explain or it will be marked Broken."
+1. When the deferred due date passes without satisfaction, the Commitment stays `Deferred` and enters an **explanation window** of 24 hours (configurable). `explanation_window_ends_at` is set and the User is notified: "Your deferred commitment is overdue — explain or it will be marked Broken." The window starts at the end of the deferred due date's local day, or when the System first observes the overdue Commitment if that is later, so a delayed sweep never shortens it.
 2. During the window it counts as an **overdue Deferred** Commitment in the integrity denominator (R9.11).
-3. If the User submits a written explanation (≥ 20 characters) within the window, the System asks for a second explicit acknowledgment. The acknowledgment is a separate confirmation step, a second card or checkbox. Only after both may the User set a new due date (re-defer; `deferral_count += 1`). The explanation is stored on the `commitment_events` row and as a Memory entry (type Fact, `User-stated`).
-4. If the window expires without an explanation, the Commitment transitions to **Broken**.
+3. If the User submits a written explanation (≥ 20 characters) within the window, the System asks for a second explicit acknowledgment. The acknowledgment is a separate confirmation step, a second card or checkbox. Only after both may the User set a new due date (re-defer; `deferral_count += 1`). The explanation is stored on the `commitment_events` row and as a Memory entry (type Fact, `User-stated`). One explanation is accepted per window.
+4. If the window expires without a completed re-deferral, the Commitment transitions to **Broken**. An explanation alone does not stop this: without the acknowledgment and a new due date the Commitment would otherwise stay overdue indefinitely, which is why the window is bounded (design §38.1, "explanation without acknowledgment").
 
 **Other rules:**
 - Rescheduling a linked Daily Action never changes the Commitment's identity, due date, or links (R9.8).
@@ -963,7 +965,7 @@ When a recomputed score falls below `users.integrity_score_threshold` (default 7
 
 ### 11.6 Promise Ledger View (R9.15)
 
-`GET /commitments` supports filters (status, date range, goal category) and sorting (created date, due date, status, goal category). `goal_category` is derived deterministically at creation from the first linked entity's Goal, through lineage (Section 16.9), and stored on the Commitment. Commitments without a Goal link have category `null` and are grouped as "Unlinked".
+`GET /commitments` supports filters (status, due-date range, goal category) and sorting (created date, due date, status, goal category), paginated with a keyset cursor on the chosen sort key. The reserved filter value `goal_category=Unlinked` selects Commitments without a Goal. `goal_category` is derived deterministically at creation from the first linked entity's Goal, through lineage (Section 16.9), and stored on the Commitment. Commitments without a Goal link have category `null` and are grouped as "Unlinked".
 
 ---
 
@@ -1059,7 +1061,9 @@ The Accountability Agent may disagree with the User's stated preferences when th
 - Levels 1–2 apply to every Daily Action source, including TASK and MANUAL. Levels 3–5 apply only to HABIT and ROUTINE_ENTRY sources.
 - "Local date" is the Daily Action's scheduled local `date` in the User's timezone.
 - Days on which the source had no scheduled occurrence do not break a "consecutive" run. Consecutiveness is measured over the source's **scheduled occurrences** (for example, a Mon/Wed/Fri habit skipped on 5 consecutive scheduled days). Days inside a Habit pause period are excluded entirely (R1.12).
-- Persistent source-level state is stored only when Level ≥ 3. A source with no current pattern is reported as baseline Level 1.
+- Only **resolved** occurrences (Completed or Skipped) take part in a run; an occurrence still Planned or Started is not yet an outcome and neither continues nor breaks it. The run is counted backwards from the most recent resolved occurrence, and it only escalates while its latest skip falls inside the 7-day window, so an old run cannot re-trigger Level 5.
+- Skips dated on or before `recovery_window_anchor_date` do not count towards escalation: those dates were already settled by a recovery, so re-escalation needs new skips (Section 14.4).
+- Persistent source-level state is stored only when Level ≥ 3. A source with no current pattern is reported as baseline Level 1. Once a row exists it is kept when the episode ends, holding Level 1 with the recovery anchor and the episode history.
 
 The `accountability_evaluation` sweeper runs every 5 minutes (Section 20.2). The CheckinService event handler also evaluates the affected source immediately, so a skip is reflected without waiting for the sweep. Each evaluation is idempotent for `(source identity, evaluation window, resulting level)`.
 
@@ -2746,13 +2750,15 @@ POST                /schedule-suggestions/{id}/accept | /reject
 
 # Commitments (R9)
 GET|POST            /commitments                    # filters/sort (R9.15)
-GET                 /commitments/{id}               # includes events history
-POST                /commitments/{id}/keep | /cancel | /defer
-POST                /commitments/{id}/explanation   # explanation + acknowledgment (Section 11.3)
+GET                 /commitments/{id}               # includes links and events history
+POST                /commitments/{id}/keep | /cancel
+POST                /commitments/{id}/defer         # {new_due_date, acknowledged}; re-defer = step 2
+POST                /commitments/{id}/explanation   # step 1 of a re-deferral (Section 11.3)
 GET                 /integrity-score                # current + 30-day series
 
 # Accountability (R8)
-GET                 /accountability/escalations
+GET                 /accountability/escalations     # ?include_resolved for ended episodes
+GET                 /accountability/escalations/{id} # state + skipped dates/reasons (Section 19.8)
 POST                /accountability/escalations/{id}/reflection
 
 # Reflections and journal (R11)

@@ -14,13 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from lifeos.config import Settings
 from lifeos.db.engine import get_sessionmaker
+from lifeos.domain.accountability import AccountabilityService
 from lifeos.domain.auth.service import AuthService
 from lifeos.domain.auth.sessions import SessionCache, SessionValidator
 from lifeos.domain.checkins import CheckinService
 from lifeos.domain.clock import Clock, SystemClock
+from lifeos.domain.commitments import CommitmentService
 from lifeos.domain.goals import GoalService, ProjectService
 from lifeos.domain.habits import HabitService, habit_sync_hook
 from lifeos.domain.idempotency import IdempotencyService
+from lifeos.domain.integrity import IntegrityService
+from lifeos.domain.memory.service import MemoryService
 from lifeos.domain.objectives import ObjectiveService
 from lifeos.domain.profile import ProfileService
 from lifeos.domain.routines import RoutineService
@@ -64,6 +68,10 @@ class Container:
     checkins: CheckinService
     reschedule: RescheduleService
     suggestions: SuggestionService
+    memory: MemoryService
+    integrity: IntegrityService
+    commitments: CommitmentService
+    accountability: AccountabilityService
     outbox: OutboxConsumer
 
     async def aclose(self) -> None:
@@ -96,7 +104,11 @@ def build_container(
     jwt = JwtService(signing, clk, timedelta(minutes=settings.access_token_ttl_minutes))
     cache = SessionCache(redis_client, ttl_seconds=jwt.ttl_seconds + 60)
     mail = email or LoggingEmailSender()
-    reschedule = RescheduleService(clk)
+    memory = MemoryService(clk)
+    integrity = IntegrityService(clk)
+    commitments = CommitmentService(clk, integrity, memory)
+    accountability = AccountabilityService(clk, memory)
+    reschedule = RescheduleService(clk, cancel_hooks=[commitments.cancel_hook])
     suggestions = SuggestionService(clk, reschedule)
 
     return Container(
@@ -125,16 +137,23 @@ def build_container(
         ),
         idempotency=IdempotencyService(maker, clk),
         profile=ProfileService(cipher, clk, timezone_hooks=[TimezoneChangeService(clk)]),
-        goals=GoalService(clk),
+        goals=GoalService(clk, cancel_hooks=[commitments.cancel_hook]),
         objectives=ObjectiveService(clk),
         projects=ProjectService(clk),
         tasks=TaskService(clk),
         routines=RoutineService(clk),
-        habits=HabitService(clk),
+        habits=HabitService(clk, cancel_hooks=[commitments.cancel_hook]),
         generation=GenerationService(clk),
         daily_actions=DailyActionService(clk),
-        checkins=CheckinService(clk, hooks=[task_sync_hook, habit_sync_hook]),
+        checkins=CheckinService(
+            clk,
+            hooks=[task_sync_hook, habit_sync_hook, commitments.checkin_hook, accountability.checkin_hook],
+        ),
         reschedule=reschedule,
         suggestions=suggestions,
+        memory=memory,
+        integrity=integrity,
+        commitments=commitments,
+        accountability=accountability,
         outbox=OutboxConsumer(maker, clk, {"daily_action.status_changed": [suggestions.on_status_changed]}),
     )

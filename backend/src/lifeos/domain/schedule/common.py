@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Literal
 
@@ -14,6 +15,9 @@ from lifeos.domain.errors import NotFoundError
 
 Actor = Literal["User", "Agent", "System"]
 ChangeType = Literal["rescheduled", "cancelled", "timezone_change", "habit_paused"]
+# Runs in the same transaction after Daily Actions are cancelled (user, habit pause, goal archive):
+# (session, user_id, cancelled actions, actor, reason). Commitment links use it (design §11.3, R9.9).
+CancelHook = Callable[[AsyncSession, uuid.UUID, list["m.DailyAction"], Actor, str], Awaitable[None]]
 
 
 async def user_timezone(s: AsyncSession, user_id: uuid.UUID) -> str:
@@ -75,24 +79,29 @@ def system_cancel(
 
 async def source_goal_id(s: AsyncSession, action: m.DailyAction) -> uuid.UUID | None:
     """Goal owning the action's source (for the archived-goal read-only rule, R1.14)."""
-    if action.source_id is None:
+    return await goal_of_source(s, action.source_type, action.source_id)
+
+
+async def goal_of_source(s: AsyncSession, source_type: str, source_id: uuid.UUID | None) -> uuid.UUID | None:
+    """Goal owning a Daily Action source (TASK / HABIT / ROUTINE_ENTRY); MANUAL has none."""
+    if source_id is None:
         return None
-    if action.source_type == "TASK":
-        task = (await s.execute(select(m.Task).where(m.Task.id == action.source_id))).scalar_one_or_none()
+    if source_type == "TASK":
+        task = (await s.execute(select(m.Task).where(m.Task.id == source_id))).scalar_one_or_none()
         if task is None:
             return None
         if task.goal_id is not None:
             return task.goal_id
         return await _goal_of_project(s, task.project_id)
-    if action.source_type == "HABIT":
-        habit = (await s.execute(select(m.Habit).where(m.Habit.id == action.source_id))).scalar_one_or_none()
+    if source_type == "HABIT":
+        habit = (await s.execute(select(m.Habit).where(m.Habit.id == source_id))).scalar_one_or_none()
         if habit is None:
             return None
         if habit.goal_id is not None:
             return habit.goal_id
         return await _goal_of_project(s, habit.project_id)
     entry_goal = (
-        await s.execute(select(m.RoutineEntry.goal_id).where(m.RoutineEntry.id == action.source_id))
+        await s.execute(select(m.RoutineEntry.goal_id).where(m.RoutineEntry.id == source_id))
     ).scalar_one_or_none()
     return entry_goal
 

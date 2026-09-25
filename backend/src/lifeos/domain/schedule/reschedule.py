@@ -25,6 +25,7 @@ from lifeos.domain.clock import Clock
 from lifeos.domain.errors import DomainError
 from lifeos.domain.schedule.common import (
     Actor,
+    CancelHook,
     add_history,
     get_action,
     goal_is_archived,
@@ -100,8 +101,9 @@ def score_candidate(
 
 
 class RescheduleService:
-    def __init__(self, clock: Clock) -> None:
+    def __init__(self, clock: Clock, cancel_hooks: list[CancelHook] | None = None) -> None:
         self._clock = clock
+        self._cancel_hooks = list(cancel_hooks or [])  # e.g. Commitment link removal (R9.9)
 
     async def _check_source_writable(self, s: AsyncSession, action: m.DailyAction) -> None:
         if await goal_is_archived(s, await source_goal_id(s, action)):
@@ -214,6 +216,8 @@ class RescheduleService:
         action.cancelled_at = now
         action.updated_at = now
         await s.flush()
+        for hook in self._cancel_hooks:
+            await hook(s, user_id, [action], actor, "daily_action_cancelled")
         await publish(
             s, "daily_action.cancelled", user_id, {"daily_action_id": str(action.id), "actor": actor}, at=now
         )
