@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
@@ -98,6 +98,23 @@ async def completion_rate(
     """Completion Rate for the User-local period [start, end] (inclusive).
 
     Evaluated as of min(now, period end)."""
+    snapshots, as_of = await load_snapshots(s, user_id, start, end, now)
+    return compute(snapshots, start, end, as_of)
+
+
+async def daily_rates(
+    s: AsyncSession, user_id: uuid.UUID, start: date, end: date, now: datetime
+) -> dict[date, CompletionRate]:
+    """One rate per local day in [start, end], from a single fetch (correlation, §16.5; weekly, §16.10)."""
+    snapshots, as_of = await load_snapshots(s, user_id, start, end, now)
+    days = [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
+    return {day: compute(snapshots, day, day, as_of) for day in days}
+
+
+async def load_snapshots(
+    s: AsyncSession, user_id: uuid.UUID, start: date, end: date, now: datetime
+) -> tuple[list[ActionSnapshot], datetime]:
+    """Daily Actions in the period with their check-in history, plus the evaluation instant."""
     tz = await user_timezone(s, user_id)
     period_end = local_day_bounds(end, tz)[1]
     as_of = min(now, period_end)
@@ -123,5 +140,4 @@ async def completion_rate(
             )
         ).tuples():
             history[action_id].append((at, previous, status))
-    snapshots = [ActionSnapshot(a.date, a.created_at, a.cancelled_at, history[a.id]) for a in actions]
-    return compute(snapshots, start, end, as_of)
+    return [ActionSnapshot(a.date, a.created_at, a.cancelled_at, history[a.id]) for a in actions], as_of

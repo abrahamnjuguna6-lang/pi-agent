@@ -1227,7 +1227,7 @@ An observation is a local day with both a self-reported `energy` value and a non
 - Pearson correlation may be shown only after a Shapiro–Wilk test on both variables gives `p > 0.05`.
 - The same analysis runs for `mood` versus Completion Rate.
 
-Results are computed nightly by the `analytics_refresh` job and stored in `analytics_results` (Section 24.9). Agents read stored results through `get_analytics` and only explain them.
+Observations are gathered over the last 90 local days, so a finding reflects the current quarter rather than the whole history. Results are computed nightly by the `analytics_refresh` job and stored in `analytics_results` (Section 24.9). Agents read stored results through `get_analytics` and only explain them.
 
 ### 16.6 Integrity Score Snapshots (R9.13)
 
@@ -1252,7 +1252,7 @@ The 30-day trend compares today's value with the value 30 days earlier and retur
 For a local date:
 - **Conflict:** two non-cancelled Daily Actions whose `[start, end)` intervals overlap.
 - **Outside waking hours:** a Daily Action starting before `wake_time` or ending after `sleep_time`.
-- **Overloaded block:** any rolling 3-hour window that is ≥ 100% booked with no gap of 10 minutes or more. The day is also overloaded when total scheduled minutes exceed 90% of waking minutes.
+- **Overloaded block:** any rolling 3-hour window whose longest free gap is under 10 minutes — the operational reading of "≥ 100% booked with no gap of 10 minutes or more". Windows are anchored at each Daily Action's start, which is where a solid stretch can begin, and the finding reads back as "from 09:00 you have no break". The day is also overloaded when total scheduled minutes (counting double-booked time once) exceed 90% of waking minutes.
 
 `ScheduleService.analyze_day()` returns these as structured findings for the Daily Briefing and the Personal Assistant context.
 
@@ -1263,13 +1263,14 @@ For a local date:
 - Task → Project and/or Goal.
 - Project → Objective → Goal.
 
-It returns the chain with titles, progress, and priority, plus the Goal's category. When no link exists, it returns an explicit `unlinked` marker so the agent says so instead of inventing a purpose.
+It returns the chain with titles, progress, and priority, plus the Goal's category. When no link exists, it returns an explicit `unlinked` marker so the agent says so instead of inventing a purpose. The walk is tolerant of deleted ancestors: only the item being asked about must exist, and a Daily Action whose Goal was deleted reads as `unlinked` rather than as a missing item.
 
 ### 16.10 Weekly Wins and Gaps (R10.2)
 
 Over the prior 7 local days (Monday–Sunday):
 - **Wins:** candidates are source identities and Tasks with Completed Daily Actions, Kept Commitments, and Objectives whose progress increased. They are ranked by linked-Goal priority, then completion count, then progress delta. The top 3 are kept.
-- **Gaps:** candidates are source identities with Skipped or incomplete actions, Broken Commitments, and Objectives with no progress that have a target date within 30 days. They are ranked by skip + incomplete count, then linked-Goal priority. The top 3 are kept.
+- **Gaps:** candidates are source identities with Skipped or incomplete actions, Broken Commitments, and Objectives with no progress that have a target date within 30 days. They are ranked by skip + incomplete count, then linked-Goal priority. The top 3 are kept. "Incomplete" means an action of the closed week that never reached Completed or Skipped, so an unchecked day counts as a gap rather than disappearing.
+- Ranking ties break on title, then id, so two runs over the same week produce the same briefing. A Commitment carries a Goal category rather than a Goal id, so its priority for ranking is the highest priority among the User's Goals in that category.
 - **Completion Rate by Goal category:** Daily Actions are attributed to a category through lineage. Unlinked actions are reported as "Unlinked".
 
 ---

@@ -21,6 +21,10 @@ the entry (and `design.md`) rather than deleting it — the reasoning is the val
 | [D10](#d10) | New error code `CONFIRMATION_REQUIRED` (400), phrase `DELETE` | Frontend delete flows (T16.6) |
 | [D11](#d11) | The accountability reflection writes its Memory entry inline, not from the event | Daily reflection flow (T13.5) |
 | [D12](#d12) | Failed embeddings retry forever, with no attempt counter | Worker sweepers (T10.2) |
+| [D13](#d13) | An overloaded 3-hour window means "no free gap of 10 minutes" | Daily Briefing (T13.3) |
+| [D14](#d14) | Correlations look back 90 local days | First real reflection data |
+| [D15](#d15) | A deleted ancestor makes a lineage chain `unlinked`, not missing | "Why?" flow (T13.4) |
+| [D16](#d16) | A Commitment's rank priority comes from its Goal category | Weekly CEO Meeting (T13.8) |
 
 ---
 
@@ -167,6 +171,54 @@ entry is retried once per sweep forever. The sweep cadence is the only throttle.
 Where: `domain/memory/embeddings.py` (`RETRYABLE_STATUSES`).
 **Revisit:** at T10.2. If this shows up in job metrics, add `embedding_attempts` and a dead-letter
 state, mirroring the outbox.
+
+## M8 — Analytics
+
+### D13
+**An overloaded 3-hour window is one whose longest free gap is under 10 minutes**, and windows are
+anchored at each Daily Action's start.
+
+Design §16.8 says "≥ 100% booked with no gap of 10 minutes or more", which mixes two measures: a
+window can be "100% booked" by double-booking while still containing free time. The gap measure is
+the one that matches what the finding means to the User — no room to breathe — and anchoring at block
+starts makes the finding reportable ("from 09:00 you have no break") instead of an arbitrary offset.
+
+Where: `domain/schedule/analysis.py` (`overloaded_windows`), design §16.8.
+**Revisit:** at T13.3, when the Daily Briefing phrases the finding. If it should also fire for a
+double-booked-but-airy window, that is a second, separate finding.
+
+### D14
+**Correlation observations are gathered over the last 90 local days.**
+
+§16.5 fixes the sample-size gates (7, 20) but never says how far back observations come from. Without
+a bound, a year-old reflection pattern would keep influencing a "current" finding. 90 days is a
+quarter — long enough to reach n = 20 for a user who reflects a few times a week.
+
+Where: `domain/analytics/correlation.py` (`LOOKBACK_DAYS`), design §16.5.
+**Revisit:** once real reflection cadence is known. If most users reflect rarely, 90 days may never
+reach n = 20 and the window needs to grow (or the gate needs rethinking).
+
+### D15
+**A lineage walk that hits a deleted ancestor ends as `unlinked` rather than raising.**
+
+Only the item being asked about must exist and belong to the User. A Daily Action whose Goal was
+deleted still exists, and the honest answer to "why am I doing this?" is "this is no longer linked to
+a goal" — a 404 would be a lie about the action itself.
+
+Where: `domain/lineage.py` (`LineageService._step`), design §16.9.
+**Revisit:** at T13.4. The "Why?" flow may want to distinguish "never linked" from "the goal was
+deleted", which needs a richer marker than a single `unlinked` flag.
+
+### D16
+**A Commitment's ranking priority is the highest priority among the User's Goals in its category.**
+
+Wins and gaps rank by "linked-Goal priority" (§16.10), but a Commitment stores `goal_category`, not a
+Goal id (§11.6), so there is no single Goal to read a priority from. The highest priority in that
+category is the closest available proxy.
+
+Where: `domain/analytics/weekly.py` (`_category_priority`), design §16.10.
+**Revisit:** at T13.8. If the briefing needs exact attribution, the Commitment should keep the
+derived `goal_id` alongside the category — a small schema change, still cheap pre-release.
 
 ---
 

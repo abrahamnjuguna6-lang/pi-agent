@@ -561,28 +561,36 @@ infra/
 
 ## M8 — Analytics and Deterministic Insights
 
-### [ ] T8.1 Correlation analysis
+### [x] T8.1 Correlation analysis
+> **Implementation note:** `correlate()` is pure and never raises on degenerate input — a constant series (a week of identical energy scores) yields no coefficient and reads as `not_significant` rather than a NaN or a crash. Spearman stays the headline method; Pearson is attached only when Shapiro–Wilk passes on both variables, and never replaces it. Below 20 observations the result carries the coefficient but no p-value, so nothing downstream can accidentally claim significance. Observations come from the last 90 local days and need both a self-report and a non-null Completion Rate for that day. `CorrelationService.refresh()` is the per-User body of the nightly `analytics_refresh` job (T10.2). SciPy ships no type stubs, so the module carries a scoped pyright pragma and converts every value crossing back into typed code.
+> **Revisit:** `docs/DECISIONS.md` D14 (the 90-day observation window is not in the design).
 - **Req:** R11.6–11.9 · **Design:** §16.5 · **Depends:** T5.8
 - **Files:** `domain/analytics/correlation.py`
 - **Steps:** apply Spearman (scipy), with Shapiro–Wilk gating Pearson. The status is one of none, preliminary, not_significant, or significant. Results are stored in `analytics_results`.
 - **Tests:** `tests/unit/test_correlation.py` covers n = 6, 7, 19, and 20 with p ≥ and < 0.05, ties, and constant input (an undefined coefficient gives `not_significant`, not a crash).
 - **Done when:** the tests pass.
 
-### [ ] T8.2 Now Mode candidates and schedule conflicts
+### [x] T8.2 Now Mode candidates and schedule conflicts
+> **Implementation note:** ordering lives in pure functions (`current_block`, `behind_schedule`, `next_unstarted`, `plan`) so the product rule is unit-testable; the service only gathers rows and resolves each action's Goal priority through lineage. Behind-schedule actions are returned in their own list and never suppress the buffer suggestion — being late is a fact to acknowledge (R7.4), not a recommendation. `analyze_day` counts double-booked time once and skips cancelled actions; a User with no wake/sleep time set gets no waking-hours findings rather than wrong ones.
+> **Revisit:** `docs/DECISIONS.md` D13 (what "overloaded 3-hour window" means operationally).
 - **Req:** R7.2–7.4, R6.4 · **Design:** §16.7–16.8 · **Depends:** T5.4, T4.4
 - **Files:** `domain/now_mode.py`, `domain/schedule/analysis.py`
 - **Steps:** `NowModeService.candidates(user, now)` and `ScheduleService.analyze_day(user, date)` return overlap, outside-waking-hours, and overload findings.
 - **Tests:** `tests/unit/test_now_mode.py` covers the current block, behind schedule, next unstarted, and a buffer suggestion with no tasks. `tests/unit/test_schedule_analysis.py` covers the overlap, the 3-hour window overload, and the 90% day overload.
 - **Done when:** the tests pass.
 
-### [ ] T8.3 LineageService
+### [x] T8.3 LineageService
+> **Implementation note:** the walk is a table-driven loop (`MODELS` + `_parent`) rather than a chain of branches, so a new node type is one table entry. Only the item being asked about is resolved strictly; a deleted ancestor ends the chain and the result reads as `unlinked`. `goal_of_entity`/`goal_category`, added early in M6 for the Promise Ledger, stay as the narrow entry point `CommitmentService` uses.
+> **Revisit:** `docs/DECISIONS.md` D15 (a deleted ancestor is reported as `unlinked`, not as a missing item).
 - **Req:** R13.7, R9.15 · **Design:** §16.9 · **Depends:** T5.3, T4.2
 - **Files:** `domain/lineage.py`
 - **Steps:** walk Daily Action → source → Task, Project, Objective, Goal, returning the `unlinked` marker when there is no link. Wire it into `CommitmentService` for `goal_category`.
 - **Tests:** `tests/unit/test_lineage.py` covers each source type, a routine entry linked to a habit linked to a goal, a deleted goal, and an unlinked item.
 - **Done when:** the tests pass.
 
-### [ ] T8.4 Weekly aggregates, wins, and gaps
+### [x] T8.4 Weekly aggregates, wins, and gaps
+> **Implementation note:** ranking is pure and total — ties break on title then id, so the same week always produces the same briefing. "Misses" counts Skipped actions plus ones that never resolved in the closed week, so an unchecked day shows up as a gap. Commitments are windowed on their resolution instant in the User's timezone, the same way the integrity score windows them. The integration test lives the week with the clock inside it, because the Completion Rate is evaluated as of the period end and actions created afterwards did not exist yet.
+> **Revisit:** `docs/DECISIONS.md` D16 (a Commitment's ranking priority is inferred from its Goal category).
 - **Req:** R10.2 · **Design:** §16.10 · **Depends:** T8.3, T6.3
 - **Files:** `domain/analytics/weekly.py`
 - **Steps:** compute the Completion Rate by category, the integrity trend, and the top-3 wins and gaps with the ranking rules.

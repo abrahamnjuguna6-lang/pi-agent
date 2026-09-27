@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from lifeos.config import Settings
 from lifeos.db.engine import get_sessionmaker
 from lifeos.domain.accountability import AccountabilityService
+from lifeos.domain.analytics.correlation import CorrelationService
+from lifeos.domain.analytics.weekly import WeeklyAnalyticsService
 from lifeos.domain.auth.service import AuthService
 from lifeos.domain.auth.sessions import SessionCache, SessionValidator
 from lifeos.domain.checkins import CheckinService
@@ -24,13 +26,16 @@ from lifeos.domain.goals import GoalService, ProjectService
 from lifeos.domain.habits import HabitService, habit_sync_hook
 from lifeos.domain.idempotency import IdempotencyService
 from lifeos.domain.integrity import IntegrityService
+from lifeos.domain.lineage import LineageService
 from lifeos.domain.memory.embeddings import Embedder, EmbeddingBackfill, OpenAIEmbedder
 from lifeos.domain.memory.search import MemorySearch
 from lifeos.domain.memory.service import MemoryService
+from lifeos.domain.now_mode import NowModeService
 from lifeos.domain.objectives import ObjectiveService
 from lifeos.domain.profile import ProfileService
 from lifeos.domain.routines import RoutineService
 from lifeos.domain.schedule.actions import DailyActionService
+from lifeos.domain.schedule.analysis import ScheduleAnalysisService
 from lifeos.domain.schedule.generation import GenerationService
 from lifeos.domain.schedule.reschedule import RescheduleService
 from lifeos.domain.schedule.suggestions import SuggestionService
@@ -78,6 +83,11 @@ class Container:
     integrity: IntegrityService
     commitments: CommitmentService
     accountability: AccountabilityService
+    lineage: LineageService
+    now_mode: NowModeService
+    schedule_analysis: ScheduleAnalysisService
+    correlation: CorrelationService
+    weekly: WeeklyAnalyticsService
     outbox: OutboxConsumer
 
     async def aclose(self) -> None:
@@ -167,6 +177,11 @@ def build_container(
         integrity=integrity,
         commitments=commitments,
         accountability=accountability,
+        lineage=LineageService(),
+        now_mode=NowModeService(clk),
+        schedule_analysis=ScheduleAnalysisService(clk),
+        correlation=CorrelationService(clk),
+        weekly=WeeklyAnalyticsService(clk, integrity),
         outbox=OutboxConsumer(
             maker,
             clk,

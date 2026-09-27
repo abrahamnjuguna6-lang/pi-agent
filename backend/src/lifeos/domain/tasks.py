@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from lifeos.domain.checkins import CheckinService, TransitionSource
 
 TASK_STATUSES = ("open", "in_progress", "completed", "cancelled")
+OPEN_TASK_STATUSES = ("open", "in_progress")  # still actionable (Now Mode buffer, design §16.7)
 
 
 async def get_task(s: AsyncSession, user_id: uuid.UUID, task_id: uuid.UUID) -> m.Task:
